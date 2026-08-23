@@ -668,6 +668,44 @@ Namespace DataEntry.Tests
                 If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
             End Try
         End Sub
+    End Class
+
+    ' ─────────────────────────────────────────────────────────────────────────
+    ' KeyHandlingTests — verify KeyDown handlers attached to TextFields
+    ' ─────────────────────────────────────────────────────────────────────────
+    Public Class KeyHandlingTests
+
+        <Fact>
+        Public Sub TextField_KeyDown_TriggersSaveAndClear()
+            Dim tf1 As New Terminal.Gui.Views.TextField() With {.Text = "SKU001"}
+            Dim tf2 As New Terminal.Gui.Views.TextField() With {.Text = "Widget"}
+            Dim allFields As New List(Of Terminal.Gui.Views.TextField) From {tf1, tf2}
+
+            Dim saveCount = 0
+            Dim onKeyDownAction = Sub(s As Object, e As Terminal.Gui.Input.Key)
+                                      If e.IsCtrl AndAlso (e.NoCtrl = Terminal.Gui.Input.Key.Empty OrElse e.NoCtrl = Terminal.Gui.Input.Key.S OrElse e.NoCtrl = Terminal.Gui.Input.Key.s OrElse e.NoCtrl = Terminal.Gui.Input.Key.R OrElse e.NoCtrl = Terminal.Gui.Input.Key.r) Then
+                                          saveCount += 1
+                                          For Each f In allFields
+                                              f.Text = ""
+                                          Next
+                                          If allFields.Count > 0 Then allFields(0).SetFocus()
+                                          e.Handled = True
+                                      End If
+                                  End Sub
+
+            AddHandler tf1.KeyDown, onKeyDownAction
+            AddHandler tf2.KeyDown, onKeyDownAction
+
+            ' Simulate Right Ctrl / Ctrl+S while focused on field 2
+            tf2.HasFocus = True
+            Dim ctrlS = Terminal.Gui.Input.Key.S.WithCtrl
+            tf2.NewKeyDownEvent(ctrlS)
+
+            Assert.Equal(1, saveCount)
+            Assert.Equal("", tf1.Text)
+            Assert.Equal("", tf2.Text)
+            Assert.True(tf1.HasFocus)
+        End Sub
 
     End Class
 

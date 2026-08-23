@@ -70,7 +70,10 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
             _app.Run(win, Nothing)
         End Sub
 
+        Private _allFields As New List(Of TextField)
+
         Private Sub BuildFields(win As Window, scr As ScreenSection)
+            _allFields.Clear()
             For Each sfld In scr.Fields
                 Dim lbl As New Label()
                 lbl.Text  = sfld.Label & ":"
@@ -85,6 +88,9 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
                 tf.Text  = ""
                 tf.SetScheme(ColorHelper.MakeFieldScheme(
                     sfld.NormalColor, sfld.FocusColor, sfld.ErrorColor, scr.DefaultColor))
+
+                _allFields.Add(tf)
+                AddHandler tf.KeyDown, AddressOf OnKeyDown
 
                 ' Enforce max length and auto-advance to next field
                 Dim maxLen = sfld.Len
@@ -111,11 +117,14 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
             If e = Key.F3 Then
                 MessageBox.Query(_app, "Cancel",
                     "Cancel data entry? (preview only — no data was written)", "OK")
+                ClearPreviewFields()
+                e.Handled = True
                 Return
             End If
 
             If e = Key.F10 Then
                 MenuBuild()
+                e.Handled = True
                 Return
             End If
 
@@ -125,6 +134,7 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
                     _app.RequestStop()
                     ShowCurrentScreen()
                 End If
+                e.Handled = True
                 Return
             End If
 
@@ -134,13 +144,16 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
                     _app.RequestStop()
                     ShowCurrentScreen()
                 End If
+                e.Handled = True
                 Return
             End If
 
-            ' Right Ctrl (alone) or Ctrl+S = Save (preview only — no file is written)
-            If e.IsCtrl AndAlso (e.NoCtrl = Key.Empty OrElse e.NoCtrl = Key.S) Then
+            ' Right Ctrl (alone), Ctrl+S, or Ctrl+R = Save (preview message)
+            If e.IsCtrl AndAlso (e.NoCtrl = Key.Empty OrElse e.NoCtrl = Key.S OrElse e.NoCtrl = Key.s OrElse e.NoCtrl = Key.R OrElse e.NoCtrl = Key.r) Then
                 MessageBox.Query(_app, "Save",
                     "Record saved. (preview only — no file was written)", "OK")
+                ClearPreviewFields()
+                e.Handled = True
                 Return
             End If
 
@@ -149,14 +162,25 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
                 Dim base_ = e.NoShift
                 If base_ = Key.PageUp Then
                     MessageBox.Query(_app, "Records", "Previous record (preview — no data file open)", "OK")
+                    e.Handled = True
                 ElseIf base_ = Key.PageDown Then
                     MessageBox.Query(_app, "Records", "Next record (preview — no data file open)", "OK")
+                    e.Handled = True
                 ElseIf base_ = Key.Home Then
                     MessageBox.Query(_app, "Records", "First record (preview — no data file open)", "OK")
+                    e.Handled = True
                 ElseIf base_ = Key.End Then
                     MessageBox.Query(_app, "Records", "Last record (preview — no data file open)", "OK")
+                    e.Handled = True
                 End If
             End If
+        End Sub
+
+        Private Sub ClearPreviewFields()
+            For Each tf In _allFields
+                tf.Text = ""
+            Next
+            If _allFields.Count > 0 Then _allFields(0).SetFocus()
         End Sub
 
         ' ── Menu actions ──────────────────────────────────────────────────────

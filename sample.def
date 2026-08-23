@@ -26,7 +26,7 @@ SCREEN CUST-ENTRY COLOR=WhiteOnBlue
     FIELD "Address Line 1" ROW=4  COL=2  LEN=30  INTO CUST.CADDR1
     FIELD "Address Line 2" ROW=5  COL=2  LEN=30  INTO CUST.CADDR2
     FIELD "City"           ROW=7  COL=2  LEN=20  INTO CUST.CCITY
-    FIELD "State"          ROW=7  COL=28 LEN=2   INTO CUST.CSTATE
-    FIELD "Zip"            ROW=7  COL=36 LEN=5   INTO CUST.CZIP
+    FIELD "State"          ROW=7  COL=30 LEN=2   INTO CUST.CSTATE
+    FIELD "Zip"            ROW=7  COL=42 LEN=5   INTO CUST.CZIP
     FIELD "Phone"          ROW=9  COL=2  LEN=13  INTO CUST.CPHONE
         NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed

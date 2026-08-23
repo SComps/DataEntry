@@ -212,6 +212,12 @@ Namespace DataEntry.Tests
                 Assert.True(File.Exists(Path.Combine(outDir, "DataFile.vb")))
                 Assert.True(File.Exists(Path.Combine(outDir, "FormatHelper.vb")))
                 Assert.True(File.Exists(Path.Combine(outDir, "ColorHelper.vb")))
+
+                Dim projFiles = Directory.GetFiles(outDir, "*.vbproj")
+                Assert.Single(projFiles)
+                Dim projContent = File.ReadAllText(projFiles(0))
+                Assert.Contains("<PublishAot>true</PublishAot>", projContent)
+                Assert.Contains("<SelfContained>true</SelfContained>", projContent)
             Finally
                 If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
             End Try
@@ -565,6 +571,39 @@ Namespace DataEntry.Tests
             Assert.NotNull(scheme)
             ' Spot-check that Normal and Focus are set (non-default Attribute)
             Assert.NotEqual(scheme.Normal, scheme.Focus)
+        End Sub
+
+    End Class
+
+    ' ─────────────────────────────────────────────────────────────────────────
+    ' TextFieldBehaviorTests — verify event signatures on Terminal.Gui TextField
+    ' ─────────────────────────────────────────────────────────────────────────
+    Public Class TextFieldBehaviorTests
+
+        <Fact>
+        Public Sub TextField_TextChanging_EnforcesLimit()
+            Dim tf As New Terminal.Gui.Views.TextField()
+            Dim maxLen = 5
+            AddHandler tf.TextChanging, Sub(sender As Object, ev As Terminal.Gui.App.ResultEventArgs(Of String))
+                If ev.Result IsNot Nothing AndAlso ev.Result.Length > maxLen Then
+                    ev.Result = ev.Result.Substring(0, maxLen)
+                End If
+            End Sub
+
+            tf.Text = "HelloWorld"
+            Assert.Equal("Hello", tf.Text)
+        End Sub
+
+        <Fact>
+        Public Sub TextField_TextChanged_FiresWithoutCastException()
+            Dim tf As New Terminal.Gui.Views.TextField()
+            Dim fired = False
+            AddHandler tf.TextChanged, Sub(sender As Object, ev As System.EventArgs)
+                fired = True
+            End Sub
+
+            tf.Text = "A"
+            Assert.True(fired)
         End Sub
 
     End Class

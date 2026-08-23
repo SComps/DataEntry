@@ -6,6 +6,7 @@ Imports Terminal.Gui.Views
 Imports Terminal.Gui.Input
 Imports Terminal.Gui.App
 Imports Terminal.Gui.Drawing
+Imports Terminal.Gui.ViewBase
 Imports System.Collections.Generic
 Imports System.IO
 Imports TDim = Terminal.Gui.ViewBase.Dim
@@ -84,6 +85,21 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
                 tf.Text  = ""
                 tf.SetScheme(ColorHelper.MakeFieldScheme(
                     sfld.NormalColor, sfld.FocusColor, sfld.ErrorColor, scr.DefaultColor))
+
+                ' Enforce max length and auto-advance to next field
+                Dim maxLen = sfld.Len
+                AddHandler tf.TextChanging, Sub(sender As Object, ev As ResultEventArgs(Of String))
+                    If ev.Result IsNot Nothing AndAlso ev.Result.Length > maxLen Then
+                        ev.Result = ev.Result.Substring(0, maxLen)
+                    End If
+                End Sub
+
+                AddHandler tf.TextChanged, Sub(sender As Object, ev As EventArgs)
+                    Dim field = DirectCast(sender, TextField)
+                    If field.HasFocus AndAlso field.Text IsNot Nothing AndAlso field.Text.Length = maxLen Then
+                        field.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop)
+                    End If
+                End Sub
 
                 win.Add(lbl, tf)
             Next
@@ -186,10 +202,10 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
             Dim result = BuildRunner.Build(_outputDir, stream:=False)
 
             Dim status = If(result.Success,
-                "Build succeeded.",
-                "Build FAILED — see output below.")
+                "AOT Publish succeeded.",
+                "AOT Publish FAILED — see output below.")
 
-            MessageBox.Query(_app, "Build Result",
+            MessageBox.Query(_app, "Publish Result",
                 status & Environment.NewLine & Environment.NewLine & result.Output, "Close")
         End Sub
 

@@ -18,4 +18,9 @@
     <ProjectReference Include="..\DataEntry.Core\DataEntry.Core.vbproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\DataEntry.Tests\Samples\*.def" CopyToPublishDirectory="PreserveNewest" Link="Samples\%(Filename)%(Extension)" />
+    <None Include="..\..\sample.def" CopyToPublishDirectory="PreserveNewest" Link="Samples\sample.def" Condition="Exists('..\..\sample.def')" />
+  </ItemGroup>
+
 </Project>

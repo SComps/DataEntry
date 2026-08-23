@@ -82,7 +82,7 @@ Namespace DataEntry
                 Dim gen As New CodeGenerator()
                 gen.GenerateProject(doc, outputDir)
 
-                Console.WriteLine("Running dotnet build…")
+                Console.WriteLine("Running dotnet publish (AOT self-contained)…")
                 Dim result = BuildRunner.Build(outputDir, stream:=True)
                 Environment.Exit(If(result.Success, 0, 1))
             End If

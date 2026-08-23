@@ -56,6 +56,7 @@ Imports System.Collections.Generic
             sb.AppendLine($"Namespace {ns}")
             sb.AppendLine($"    Module Program")
             sb.AppendLine($"        Sub Main(args As String())")
+            sb.AppendLine($"            DataFile.Initialize()   ' handle NOAPPEND before any UI starts")
             sb.AppendLine($"            Dim app = Application.Create().Init()")
             sb.AppendLine($"            Dim form As New MainForm(app)")
             sb.AppendLine($"            app.Run(form, Nothing)")
@@ -69,39 +70,66 @@ Imports System.Collections.Generic
         ' ── DataFile.vb ──────────────────────────────────────────────────────
 
         Private Sub WriteDataFile(dir As String, ns As String, doc As DslDocument)
-            Dim ds = doc.Data
-            Dim lend = LineEndingString(ds.Ending)
+            Dim ds      = doc.Data
+            Dim lendExpr = LineEndingExpr(ds.Ending)   ' VB.NET expression: vbCrLf, vbLf, vbCr, or """"""
+            Dim lendLen  = LineEndingLen(ds.Ending)    ' byte count (0–2) — known at code-gen time
+            Dim recSize  = ds.Lrecl + lendLen          ' total bytes per record in the file
             Dim isAppend = (ds.Mode = AppendMode.Append)
 
             Dim sb As New StringBuilder
-            sb.AppendLine($"' DataFile — handles reading and writing fixed-length records.")
+            sb.AppendLine("' DataFile — handles reading and writing fixed-length records.")
             sb.AppendLine("Imports System.IO")
             sb.AppendLine("Imports System.Text")
             sb.AppendLine()
             sb.AppendLine($"Namespace {ns}")
             sb.AppendLine("    Public Class DataFile")
             sb.AppendLine($"        Private Const FilePath As String = ""{EscapeString(ds.FilePath)}""")
-            sb.AppendLine($"        Private Const Lrecl As Integer = {ds.Lrecl}")
-            sb.AppendLine($"        Private Const IsAppend As Boolean = {isAppend.ToString().ToLower()}")
+            sb.AppendLine($"        Private Const Lrecl   As Integer = {ds.Lrecl}")
+            sb.AppendLine($"        Private Const RecSize As Integer = {recSize}   ' Lrecl + line-ending bytes")
             sb.AppendLine()
-            sb.AppendLine("        ' Write a record to the file.")
+
+            ' ── Initialize: honour NOAPPEND by deleting the output file at startup. ──
+            ' WriteRecord always appends; the file starts fresh because Initialize deleted it.
+            sb.AppendLine("        ''' <summary>")
+            sb.AppendLine("        ''' Call once at startup before any record is written.")
+            If isAppend Then
+                sb.AppendLine("        ''' APPEND mode — existing records are preserved.")
+            Else
+                sb.AppendLine("        ''' NOAPPEND mode — deletes the output file so the session starts fresh.")
+            End If
+            sb.AppendLine("        ''' </summary>")
+            sb.AppendLine("        Public Shared Sub Initialize()")
+            If isAppend Then
+                sb.AppendLine("            ' APPEND — nothing to do.")
+            Else
+                sb.AppendLine("            If File.Exists(FilePath) Then File.Delete(FilePath)")
+            End If
+            sb.AppendLine("        End Sub")
+            sb.AppendLine()
+
+            ' ── WriteRecord ──────────────────────────────────────────────────
+            sb.AppendLine("        ''' <summary>Pad/truncate data to LRECL and append it to the output file.</summary>")
             sb.AppendLine("        Public Shared Sub WriteRecord(data As String)")
-            sb.AppendLine("            ' Pad or truncate to LRECL")
             sb.AppendLine("            If data.Length < Lrecl Then data = data.PadRight(Lrecl)")
             sb.AppendLine("            If data.Length > Lrecl Then data = data.Substring(0, Lrecl)")
-            sb.AppendLine($"            Dim lineEnd As String = ""{lend}""")
-            sb.AppendLine("            Using sw As New StreamWriter(FilePath, IsAppend, Encoding.ASCII)")
+            ' Always open in append mode: Initialize() handles the NOAPPEND delete.
+            ' Using append here prevents one record from overwriting the previous one.
+            sb.AppendLine("            Using sw As New StreamWriter(FilePath, append:=True, Encoding.ASCII)")
             sb.AppendLine("                sw.Write(data)")
-            sb.AppendLine("                If lineEnd.Length > 0 Then sw.Write(lineEnd)")
+            If lendLen > 0 Then
+                sb.AppendLine($"                sw.Write({lendExpr})   ' {ds.Ending} line ending")
+            End If
             sb.AppendLine("            End Using")
             sb.AppendLine("        End Sub")
             sb.AppendLine()
-            sb.AppendLine("        ' Read all records from the file into a List.")
+
+            ' ── ReadAllRecords ───────────────────────────────────────────────
+            sb.AppendLine("        ''' <summary>Read all fixed-length records from the file.</summary>")
             sb.AppendLine("        Public Shared Function ReadAllRecords() As List(Of String)")
             sb.AppendLine("            Dim records As New List(Of String)")
             sb.AppendLine("            If Not File.Exists(FilePath) Then Return records")
             sb.AppendLine("            Dim raw = File.ReadAllBytes(FilePath)")
-            sb.AppendLine($"            Dim recSize = Lrecl + ""{lend}"".Length")
+            sb.AppendLine($"            Const recSize As Integer = {recSize}   ' Lrecl({ds.Lrecl}) + ending({lendLen})")
             sb.AppendLine("            Dim i = 0")
             sb.AppendLine("            Do While i + Lrecl <= raw.Length")
             sb.AppendLine("                records.Add(Encoding.ASCII.GetString(raw, i, Lrecl))")
@@ -483,12 +511,26 @@ Imports System.Collections.Generic
             Return sb.ToString()
         End Function
 
-        Private Shared Function LineEndingString(ending As LineEnding) As String
+        ''' <summary>
+        ''' Returns the VB.NET expression for the line ending suitable for embedding
+        ''' in generated source code (e.g. "vbCrLf" rather than raw CR+LF bytes).
+        ''' </summary>
+        Private Shared Function LineEndingExpr(ending As LineEnding) As String
             Select Case ending
-                Case LineEnding.CRLF : Return "\r\n"
-                Case LineEnding.LF   : Return "\n"
-                Case LineEnding.CR   : Return "\r"
-                Case Else            : Return ""
+                Case LineEnding.CRLF : Return "vbCrLf"
+                Case LineEnding.LF   : Return "vbLf"
+                Case LineEnding.CR   : Return "vbCr"
+                Case Else            : Return """"""""
+            End Select
+        End Function
+
+        ''' <summary>Returns the byte count of the line-ending sequence.</summary>
+        Private Shared Function LineEndingLen(ending As LineEnding) As Integer
+            Select Case ending
+                Case LineEnding.CRLF : Return 2
+                Case LineEnding.LF   : Return 1
+                Case LineEnding.CR   : Return 1
+                Case Else            : Return 0
             End Select
         End Function
 

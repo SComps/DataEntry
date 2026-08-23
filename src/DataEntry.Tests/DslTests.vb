@@ -608,4 +608,67 @@ Namespace DataEntry.Tests
 
     End Class
 
+    ' ─────────────────────────────────────────────────────────────────────────
+    ' DataFileCodeGenTests — verify generated DataFile.vb code correctness
+    ' ─────────────────────────────────────────────────────────────────────────
+    Public Class DataFileCodeGenTests
+
+        <Fact>
+        Public Sub CodeGen_DataFile_CRLF_AppendMode()
+            Dim dsl = "DATA-SECTION" & vbCrLf &
+                      "    FILE test.dat APPEND LRECL=50 LEND=CRLF" & vbCrLf &
+                      "RECORD R" & vbCrLf &
+                      "    F1 LEN=50" & vbCrLf &
+                      "    FORMAT=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX." & vbCrLf &
+                      "SCREEN-SECTION" & vbCrLf &
+                      "SCREEN S" & vbCrLf &
+                      "    FIELD ""F1"" ROW=1 COL=1 LEN=50 INTO R.F1"
+            Dim result = ParseDsl(dsl)
+            Dim outDir = Path.Combine(Path.GetTempPath(), $"cg_df_crlf_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim dfContent = File.ReadAllText(Path.Combine(outDir, "DataFile.vb"))
+                Dim progContent = File.ReadAllText(Path.Combine(outDir, "Program.vb"))
+
+                Assert.Contains("Private Const FilePath As String = ""test.dat""", dfContent)
+                Assert.Contains("Private Const Lrecl   As Integer = 50", dfContent)
+                Assert.Contains("Private Const RecSize As Integer = 52", dfContent)
+                Assert.Contains("sw.Write(vbCrLf)", dfContent)
+                Assert.Contains("APPEND mode", dfContent)
+                Assert.Contains("DataFile.Initialize()", progContent)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        <Fact>
+        Public Sub CodeGen_DataFile_LF_NoAppendMode()
+            Dim dsl = "DATA-SECTION" & vbCrLf &
+                      "    FILE out.dat NOAPPEND LRECL=80 LEND=LF" & vbCrLf &
+                      "RECORD R" & vbCrLf &
+                      "    F1 LEN=80" & vbCrLf &
+                      "    FORMAT=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX." & vbCrLf &
+                      "SCREEN-SECTION" & vbCrLf &
+                      "SCREEN S" & vbCrLf &
+                      "    FIELD ""F1"" ROW=1 COL=1 LEN=80 INTO R.F1"
+            Dim result = ParseDsl(dsl)
+            Dim outDir = Path.Combine(Path.GetTempPath(), $"cg_df_lf_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim dfContent = File.ReadAllText(Path.Combine(outDir, "DataFile.vb"))
+
+                Assert.Contains("Private Const FilePath As String = ""out.dat""", dfContent)
+                Assert.Contains("Private Const Lrecl   As Integer = 80", dfContent)
+                Assert.Contains("Private Const RecSize As Integer = 81", dfContent)
+                Assert.Contains("sw.Write(vbLf)", dfContent)
+                Assert.Contains("If File.Exists(FilePath) Then File.Delete(FilePath)", dfContent)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+    End Class
+
 End Namespace

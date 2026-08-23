@@ -74,7 +74,10 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
 
         Private Sub BuildFields(win As Window, scr As ScreenSection)
             _allFields.Clear()
-            For Each sfld In scr.Fields
+            For i = 0 To scr.Fields.Count - 1
+                Dim sfld = scr.Fields(i)
+                Dim isLastField = (i = scr.Fields.Count - 1)
+
                 Dim lbl As New Label()
                 lbl.Text  = sfld.Label & ":"
                 lbl.X     = TPos.Absolute(sfld.Col - 1)
@@ -92,7 +95,7 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
                 _allFields.Add(tf)
                 AddHandler tf.KeyDown, AddressOf OnKeyDown
 
-                ' Enforce max length and auto-advance to next field
+                ' Enforce max length
                 Dim maxLen = sfld.Len
                 AddHandler tf.TextChanging, Sub(sender As Object, ev As ResultEventArgs(Of String))
                     If ev.Result IsNot Nothing AndAlso ev.Result.Length > maxLen Then
@@ -100,12 +103,40 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
                     End If
                 End Sub
 
-                AddHandler tf.TextChanged, Sub(sender As Object, ev As EventArgs)
-                    Dim field = DirectCast(sender, TextField)
-                    If field.HasFocus AndAlso field.Text IsNot Nothing AndAlso field.Text.Length = maxLen Then
-                        field.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop)
-                    End If
-                End Sub
+                If isLastField Then
+                    ' Last field auto-saves in preview
+                    AddHandler tf.TextChanged, Sub(sender As Object, ev As EventArgs)
+                        Dim field = DirectCast(sender, TextField)
+                        If field.HasFocus AndAlso field.Text IsNot Nothing AndAlso field.Text.Length = maxLen Then
+                            MessageBox.Query(_app, "Save",
+                                "Record saved. (preview only — no file was written)", "OK")
+                            ClearPreviewFields()
+                        End If
+                    End Sub
+                    AddHandler tf.KeyDown, Sub(sender As Object, ev As Key)
+                        If ev = Key.Enter Then
+                            MessageBox.Query(_app, "Save",
+                                "Record saved. (preview only — no file was written)", "OK")
+                            ClearPreviewFields()
+                            ev.Handled = True
+                        End If
+                    End Sub
+                Else
+                    ' Intermediate fields auto-advance to next field
+                    AddHandler tf.TextChanged, Sub(sender As Object, ev As EventArgs)
+                        Dim field = DirectCast(sender, TextField)
+                        If field.HasFocus AndAlso field.Text IsNot Nothing AndAlso field.Text.Length = maxLen Then
+                            field.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop)
+                        End If
+                    End Sub
+                    AddHandler tf.KeyDown, Sub(sender As Object, ev As Key)
+                        If ev = Key.Enter Then
+                            Dim field = DirectCast(sender, TextField)
+                            field.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop)
+                            ev.Handled = True
+                        End If
+                    End Sub
+                End If
 
                 win.Add(lbl, tf)
             Next
@@ -148,8 +179,8 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
                 Return
             End If
 
-            ' Right Ctrl (alone), Ctrl+S, or Ctrl+R = Save (preview message)
-            If e.IsCtrl AndAlso (e.NoCtrl = Key.Empty OrElse e.NoCtrl = Key.S OrElse e.NoCtrl = Key.s OrElse e.NoCtrl = Key.R OrElse e.NoCtrl = Key.r) Then
+            ' Ctrl+S = Save (preview message)
+            If e.IsCtrl AndAlso (e.NoCtrl = Key.S OrElse e.NoCtrl = Key.s) Then
                 MessageBox.Query(_app, "Save",
                     "Record saved. (preview only — no file was written)", "OK")
                 ClearPreviewFields()

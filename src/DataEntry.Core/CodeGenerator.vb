@@ -283,6 +283,11 @@ Imports System.Collections.Generic
             sb.AppendLine("        Private Sub BuildForm()")
 
             ' Screen layout
+            Dim totalFieldCount = 0
+            For Each scr In doc.Screens
+                totalFieldCount += scr.Fields.Count
+            Next
+
             Dim varIdx = 0
             For Each scr In doc.Screens
                 Dim nfgScr = scr.DefaultColor.Fg
@@ -301,6 +306,7 @@ Imports System.Collections.Generic
                 For Each sfld In scr.Fields
                     Dim vn = fieldVars(varIdx)
                     varIdx += 1
+                    Dim isLastField = (varIdx = totalFieldCount)
                     Dim nfg = If(sfld.NormalColor IsNot Nothing, sfld.NormalColor.Fg, scr.DefaultColor.Fg)
                     Dim nbg = If(sfld.NormalColor IsNot Nothing, sfld.NormalColor.Bg, scr.DefaultColor.Bg)
                     Dim ffg = If(sfld.FocusColor IsNot Nothing, sfld.FocusColor.Fg, "Black")
@@ -331,18 +337,45 @@ Imports System.Collections.Generic
                     sb.AppendLine($"            _allFields.Add({vn})")
                     sb.AppendLine($"            AddHandler {vn}.KeyDown, AddressOf OnKeyDown")
 
-                    ' Enforce max length and auto-advance to next field
+                    ' Enforce max length
                     sb.AppendLine($"            AddHandler {vn}.TextChanging, Sub(sender As Object, ev As ResultEventArgs(Of String))")
                     sb.AppendLine($"                If ev.Result IsNot Nothing AndAlso ev.Result.Length > {sfld.Len} Then")
                     sb.AppendLine($"                    ev.Result = ev.Result.Substring(0, {sfld.Len})")
                     sb.AppendLine($"                End If")
                     sb.AppendLine($"            End Sub")
-                    sb.AppendLine($"            AddHandler {vn}.TextChanged, Sub(sender As Object, ev As EventArgs)")
-                    sb.AppendLine($"                Dim fld = DirectCast(sender, TextField)")
-                    sb.AppendLine($"                If fld.HasFocus AndAlso fld.Text IsNot Nothing AndAlso fld.Text.Length = {sfld.Len} Then")
-                    sb.AppendLine($"                    fld.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop)")
-                    sb.AppendLine($"                End If")
-                    sb.AppendLine($"            End Sub")
+
+                    If isLastField Then
+                        ' Last field auto-saves on completion
+                        sb.AppendLine($"            AddHandler {vn}.TextChanged, Sub(sender As Object, ev As EventArgs)")
+                        sb.AppendLine($"                Dim fld = DirectCast(sender, TextField)")
+                        sb.AppendLine($"                If fld.HasFocus AndAlso fld.Text IsNot Nothing AndAlso fld.Text.Length = {sfld.Len} Then")
+                        sb.AppendLine($"                    SaveRecord()")
+                        sb.AppendLine($"                    ClearFields()")
+                        sb.AppendLine($"                End If")
+                        sb.AppendLine($"            End Sub")
+                        sb.AppendLine($"            AddHandler {vn}.KeyDown, Sub(sender As Object, ev As Key)")
+                        sb.AppendLine($"                If ev = Key.Enter Then")
+                        sb.AppendLine($"                    SaveRecord()")
+                        sb.AppendLine($"                    ClearFields()")
+                        sb.AppendLine($"                    ev.Handled = True")
+                        sb.AppendLine($"                End If")
+                        sb.AppendLine($"            End Sub")
+                    Else
+                        ' Intermediate fields auto-advance to next field
+                        sb.AppendLine($"            AddHandler {vn}.TextChanged, Sub(sender As Object, ev As EventArgs)")
+                        sb.AppendLine($"                Dim fld = DirectCast(sender, TextField)")
+                        sb.AppendLine($"                If fld.HasFocus AndAlso fld.Text IsNot Nothing AndAlso fld.Text.Length = {sfld.Len} Then")
+                        sb.AppendLine($"                    fld.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop)")
+                        sb.AppendLine($"                End If")
+                        sb.AppendLine($"            End Sub")
+                        sb.AppendLine($"            AddHandler {vn}.KeyDown, Sub(sender As Object, ev As Key)")
+                        sb.AppendLine($"                If ev = Key.Enter Then")
+                        sb.AppendLine($"                    Dim fld = DirectCast(sender, TextField)")
+                        sb.AppendLine($"                    fld.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop)")
+                        sb.AppendLine($"                    ev.Handled = True")
+                        sb.AppendLine($"                End If")
+                        sb.AppendLine($"            End Sub")
+                    End If
                     sb.AppendLine()
                 Next
             Next
@@ -395,8 +428,8 @@ Imports System.Collections.Generic
             sb.AppendLine("                e.Handled = True")
             sb.AppendLine("                Return")
             sb.AppendLine("            End If")
-            sb.AppendLine("            ' Right Ctrl (alone), Ctrl+S, or Ctrl+R = Save record and clear fields")
-            sb.AppendLine("            If e.IsCtrl AndAlso (e.NoCtrl = Key.Empty OrElse e.NoCtrl = Key.S OrElse e.NoCtrl = Key.s OrElse e.NoCtrl = Key.R OrElse e.NoCtrl = Key.r) Then")
+            sb.AppendLine("            ' Ctrl+S = Save record manually and clear fields")
+            sb.AppendLine("            If e.IsCtrl AndAlso (e.NoCtrl = Key.S OrElse e.NoCtrl = Key.s) Then")
             sb.AppendLine("                SaveRecord()")
             sb.AppendLine("                ClearFields()")
             sb.AppendLine("                e.Handled = True")

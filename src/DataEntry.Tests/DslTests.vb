@@ -676,14 +676,14 @@ Namespace DataEntry.Tests
     Public Class KeyHandlingTests
 
         <Fact>
-        Public Sub TextField_KeyDown_TriggersSaveAndClear()
+        Public Sub TextField_CtrlS_TriggersSaveAndClear()
             Dim tf1 As New Terminal.Gui.Views.TextField() With {.Text = "SKU001"}
             Dim tf2 As New Terminal.Gui.Views.TextField() With {.Text = "Widget"}
             Dim allFields As New List(Of Terminal.Gui.Views.TextField) From {tf1, tf2}
 
             Dim saveCount = 0
             Dim onKeyDownAction = Sub(s As Object, e As Terminal.Gui.Input.Key)
-                                      If e.IsCtrl AndAlso (e.NoCtrl = Terminal.Gui.Input.Key.Empty OrElse e.NoCtrl = Terminal.Gui.Input.Key.S OrElse e.NoCtrl = Terminal.Gui.Input.Key.s OrElse e.NoCtrl = Terminal.Gui.Input.Key.R OrElse e.NoCtrl = Terminal.Gui.Input.Key.r) Then
+                                      If e.IsCtrl AndAlso (e.NoCtrl = Terminal.Gui.Input.Key.S OrElse e.NoCtrl = Terminal.Gui.Input.Key.s) Then
                                           saveCount += 1
                                           For Each f In allFields
                                               f.Text = ""
@@ -696,10 +696,37 @@ Namespace DataEntry.Tests
             AddHandler tf1.KeyDown, onKeyDownAction
             AddHandler tf2.KeyDown, onKeyDownAction
 
-            ' Simulate Right Ctrl / Ctrl+S while focused on field 2
+            ' Simulate Ctrl+S while focused on field 2
             tf2.HasFocus = True
             Dim ctrlS = Terminal.Gui.Input.Key.S.WithCtrl
             tf2.NewKeyDownEvent(ctrlS)
+
+            Assert.Equal(1, saveCount)
+            Assert.Equal("", tf1.Text)
+            Assert.Equal("", tf2.Text)
+            Assert.True(tf1.HasFocus)
+        End Sub
+
+        <Fact>
+        Public Sub LastField_EnterKey_TriggersSaveAndClear()
+            Dim tf1 As New Terminal.Gui.Views.TextField() With {.Text = "ITEM01"}
+            Dim tf2 As New Terminal.Gui.Views.TextField() With {.Text = "100"}
+            Dim allFields As New List(Of Terminal.Gui.Views.TextField) From {tf1, tf2}
+
+            Dim saveCount = 0
+            AddHandler tf2.KeyDown, Sub(s As Object, e As Terminal.Gui.Input.Key)
+                                        If e = Terminal.Gui.Input.Key.Enter Then
+                                            saveCount += 1
+                                            For Each f In allFields
+                                                f.Text = ""
+                                            Next
+                                            If allFields.Count > 0 Then allFields(0).SetFocus()
+                                            e.Handled = True
+                                        End If
+                                    End Sub
+
+            tf2.HasFocus = True
+            tf2.NewKeyDownEvent(Terminal.Gui.Input.Key.Enter)
 
             Assert.Equal(1, saveCount)
             Assert.Equal("", tf1.Text)

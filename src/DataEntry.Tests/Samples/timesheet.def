@@ -1,0 +1,54 @@
+* timesheet.def
+* Weekly employee timesheet — employee ID, week ending date, and daily hours.
+* Demonstrates numeric fields, zero-fill, and multiple screens.
+
+DATA-SECTION
+    FILE timesheets.dat NOAPPEND LRECL=65 LEND=LF
+
+RECORD TIMESHEET
+    EMPID   START=1  LEN=6
+    FORMAT=999999.
+    WEEKEND LEN=8
+    FORMAT=99\/99\/9999.
+    MON     LEN=4
+    FORMAT=ZZ.99.
+    TUE     LEN=4
+    FORMAT=ZZ.99.
+    WED     LEN=4
+    FORMAT=ZZ.99.
+    THU     LEN=4
+    FORMAT=ZZ.99.
+    FRI     LEN=4
+    FORMAT=ZZ.99.
+    SAT     LEN=4
+    FORMAT=ZZ.99.
+    SUN     LEN=4
+    FORMAT=ZZ.99.
+    TOTALS  LEN=5
+    FORMAT=ZZZ.99.
+    JOBCODE LEN=5
+    FORMAT=UUUUU.
+    APPRVD  LEN=1
+    FORMAT=U.
+    NOTES   LEN=12
+    FORMAT=XXXXXXXXXXXX.
+
+SCREEN-SECTION
+SCREEN TIMESHEET-ENTRY FG=White BG=DarkGreen
+    FIELD "Employee ID"  ROW=2  COL=2  LEN=6   INTO TIMESHEET.EMPID
+        NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    FIELD "Week Ending"  ROW=2  COL=18 LEN=8   INTO TIMESHEET.WEEKEND
+        NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    FIELD "Job Code"     ROW=2  COL=34 LEN=5   INTO TIMESHEET.JOBCODE
+
+SCREEN HOURS-ENTRY FG=White BG=DarkGreen
+    FIELD "Monday"    ROW=4  COL=2  LEN=4  INTO TIMESHEET.MON
+    FIELD "Tuesday"   ROW=5  COL=2  LEN=4  INTO TIMESHEET.TUE
+    FIELD "Wednesday" ROW=6  COL=2  LEN=4  INTO TIMESHEET.WED
+    FIELD "Thursday"  ROW=7  COL=2  LEN=4  INTO TIMESHEET.THU
+    FIELD "Friday"    ROW=8  COL=2  LEN=4  INTO TIMESHEET.FRI
+    FIELD "Saturday"  ROW=9  COL=2  LEN=4  INTO TIMESHEET.SAT
+    FIELD "Sunday"    ROW=10 COL=2  LEN=4  INTO TIMESHEET.SUN
+    FIELD "Total"     ROW=12 COL=2  LEN=5  INTO TIMESHEET.TOTALS
+    FIELD "Approved"  ROW=12 COL=14 LEN=1  INTO TIMESHEET.APPRVD
+    FIELD "Notes"     ROW=14 COL=2  LEN=12 INTO TIMESHEET.NOTES

@@ -1,0 +1,91 @@
+PROJECT
+    A "language" to define text oriented data entry screens similar to COBOL.
+It will be built with VB.NET using the Dotnet 10.0 SDK that is already installed
+on this system and the Terminal.GUI library available online through references.
+
+    It must run on Windows, Linux, and MacOS in console mode.
+
+    The code cannot be over-engineered.  It must be simple, easy to read and
+efficient.  We will not be running ourselves in circles debugging code that
+is overly complicated.
+
+LANGUAGE SPECIFICATIONS
+
+While it will be similar to COBOL, it will not adhere to the strict formatting
+of COBOL.  It will have sections:
+
+DATA-SECTION: which will define the dataset filename and it's characteristics including
+logical record length.  
+Within the data section will be a RECORD indicator that will define the individual fields
+in records.  Those fields will need to be referenced within the data entry screen as variables
+for validation and potentially calculation purposes
+FILE would be the full pathname of the output file.
+APPEND means add to the end of an existing data file if it exists.  otherwise create it
+NOAPPEND would mean that we're going to overwrite all existing data. (delete and create)
+LRECL is the logical record length
+LEND is how line endings should be written to the output file
+    CRLF = Carriage Return/Line Feed combination
+    LF = Line Feed
+    CR = Carriage Return
+    NONE = continuous stream
+
+eg:
+DATA-SECTION
+    FILE output.dat APPEND LRECL=80 LEND=CRLF
+RECORD CUST
+    CNAME START=1 LEN=30
+    FORMAT=X30.
+    CADDR1 LEN=30
+    FORMAT=X30.
+    CADDR2 LEN=30
+    FORMAT=X30.
+    CCITY LEN=20
+    FORMAT=X20.
+    CSTATE LEN=2
+    FORMAT=UU.
+    CZIP LEN=5
+    FORMAT=99999.
+    CPHONE LEN=13
+    FORMAT=999\-999\-9999.
+
+Format characters initially are X=alphanumeric, U is upper case, L is lower case, 9 is digit including zeros.
+the \ states the next character is a non-entry literal, but must be stored as data.  to insert a \ character into
+the data it will be defined as \\.
+Other formatting specifications may be added that make sense including ZZZZZ9.99 for zero fill.  When storing data
+in the file, numbers should be right adjusted, while text is left adjusted.  If Z is not specified the padding will
+be spaces. ex 9999 would produce '  15' but ZZZZ would produce '0015' (without the single quotes).
+
+Validation functions can return True, False or a data result.  True would be "accept the data as is", False would be 
+'deny the data, and re-enter", a data result would be massaged data that is to be returned to the field as if it were
+entered.
+
+VERY limited coding and reading of variables should be allowed for this validation.  AI has discretion in this 
+endeavor.  COBOL-like language contructs are preferred.
+
+the SCREEN-SECTION would behave much like the COBOL SCREEN-SECTION to define data entry.  Default 'hot keys' such as
+Page Up, Page Down (for multiple screen forms), F3 to cancel the form, and the Right Control key for "Save" the form 
+should be automatically defined and not be specified in the code.  Normal character editting functions must be implemented
+such as Insert, backspace, delete, home, and end etc.
+
+"INTO <record>.<varable>" is how data will be pushed to the current record before storage. Eg: INTO CUST.CNAME.
+The screen specification should support VALIDATE WITH <function>. When the user attempts to store the form; 
+the validate function should be called with the field data as it's only parameter; receiving back the result as True, False or data to
+be replaced.  True is accepted, False is 'dont change the data, but make the user fix it.' and a data return would simply replace
+the field data on the screen with the return value.
+
+
+Users should be able to navigate the records in the datafile using a keystroke (possibly Shift Page-Up, Shift-Page Down, Shift-Home (first rec)
+and Shift-End (last rec) in order to edit existing data if necessary.
+
+When the form definition is completed, this program should output a standard C program, and compile it into an executable suitable
+for the architecture in question.
+
+Additional capabilities, suggestions and questions should be asked and clarified prior to creating code.
+
+
+
+
+
+    
+
+

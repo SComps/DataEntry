@@ -1,0 +1,38 @@
+* inventory.def
+* Inventory item entry — SKU, description, quantity, price, location.
+* Demonstrates VALIDATE WITH and numeric formatting with zero-fill.
+
+DATA-SECTION
+    FILE inventory.dat APPEND LRECL=80 LEND=CRLF
+
+RECORD ITEM
+    SKU     START=1  LEN=10
+    FORMAT=XXXXXXXXXX.
+    DESCR   LEN=30
+    FORMAT=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.
+    QTY     LEN=6
+    FORMAT=ZZZZZZ.
+    PRICE   LEN=9
+    FORMAT=ZZZZZ.99.
+    LOCATN  LEN=8
+    FORMAT=UUUUUUUU.
+    ACTIVE  LEN=1
+    FORMAT=U.
+    REORDER LEN=6
+    FORMAT=ZZZZZZ.
+    SUPPLR  LEN=10
+    FORMAT=XXXXXXXXXX.
+
+SCREEN-SECTION
+SCREEN INVENTORY-ENTRY COLOR=WhiteOnDarkBlue
+    FIELD "SKU"         ROW=2  COL=2  LEN=10  INTO ITEM.SKU   VALIDATE WITH CHECKSKU
+        NORMAL=WhiteOnDarkBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    FIELD "Description" ROW=4  COL=2  LEN=30  INTO ITEM.DESCR
+    FIELD "Qty On Hand" ROW=6  COL=2  LEN=6   INTO ITEM.QTY   VALIDATE WITH CHECKQTY
+        NORMAL=WhiteOnDarkBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    FIELD "Unit Price"  ROW=6  COL=16 LEN=9   INTO ITEM.PRICE VALIDATE WITH CHECKPRICE
+        NORMAL=WhiteOnDarkBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    FIELD "Location"    ROW=8  COL=2  LEN=8   INTO ITEM.LOCATN
+    FIELD "Active"      ROW=8  COL=18 LEN=1   INTO ITEM.ACTIVE
+    FIELD "Reorder At"  ROW=10 COL=2  LEN=6   INTO ITEM.REORDER
+    FIELD "Supplier"    ROW=10 COL=16 LEN=10  INTO ITEM.SUPPLR

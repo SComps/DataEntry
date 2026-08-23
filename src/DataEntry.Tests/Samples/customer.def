@@ -1,0 +1,40 @@
+* customer.def
+* Customer master record — name, address, contact details.
+* Demonstrates multi-field layout, phone/zip masking, and state upper-case.
+
+DATA-SECTION
+    FILE customers.dat APPEND LRECL=120 LEND=CRLF
+
+RECORD CUSTOMER
+    CUSTID  START=1   LEN=6
+    FORMAT=999999.
+    LNAME   LEN=20
+    FORMAT=XXXXXXXXXXXXXXXXXXXX.
+    FNAME   LEN=15
+    FORMAT=XXXXXXXXXXXXXXX.
+    ADDR1   LEN=25
+    FORMAT=XXXXXXXXXXXXXXXXXXXXXXXXX.
+    CITY    LEN=18
+    FORMAT=XXXXXXXXXXXXXXXXXX.
+    STATE   LEN=2
+    FORMAT=UU.
+    ZIP     LEN=5
+    FORMAT=99999.
+    PHONE   LEN=12
+    FORMAT=999\-999\-9999.
+    EMAIL   LEN=17
+    FORMAT=XXXXXXXXXXXXXXXXX.
+
+SCREEN-SECTION
+SCREEN CUSTOMER-ENTRY COLOR=WhiteOnBlue
+    FIELD "Customer ID"   ROW=2  COL=2  LEN=6   INTO CUSTOMER.CUSTID
+        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    FIELD "Last Name"     ROW=4  COL=2  LEN=20  INTO CUSTOMER.LNAME
+    FIELD "First Name"    ROW=4  COL=28 LEN=15  INTO CUSTOMER.FNAME
+    FIELD "Address"       ROW=6  COL=2  LEN=25  INTO CUSTOMER.ADDR1
+    FIELD "City"          ROW=8  COL=2  LEN=18  INTO CUSTOMER.CITY
+    FIELD "State"         ROW=8  COL=26 LEN=2   INTO CUSTOMER.STATE
+    FIELD "Zip"           ROW=8  COL=34 LEN=5   INTO CUSTOMER.ZIP
+    FIELD "Phone"         ROW=10 COL=2  LEN=12  INTO CUSTOMER.PHONE
+        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    FIELD "Email"         ROW=10 COL=22 LEN=17  INTO CUSTOMER.EMAIL

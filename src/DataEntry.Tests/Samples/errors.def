@@ -1,0 +1,21 @@
+* errors.def
+* Intentionally broken definition used to verify error detection.
+
+DATA-SECTION
+    FILE errors.dat LRECL=20 LEND=CRLF
+
+* Duplicate record name
+RECORD DUP
+    AFIELD LEN=10
+    FORMAT=XXXXXXXXXX.
+    AFIELD LEN=10
+    FORMAT=XXXXXXXXXX.
+
+RECORD DUP
+    X LEN=5
+    FORMAT=XXXXX.
+
+SCREEN-SECTION
+SCREEN BAD-SCREEN COLOR=WhiteOnBlue
+    * INTO references a non-existent record
+    FIELD "Test" ROW=1 COL=1 LEN=5 INTO NORECORD.NOFIELD

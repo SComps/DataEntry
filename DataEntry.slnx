@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DataEntry.Core/DataEntry.Core.vbproj" />
+    <Project Path="src/DataEntry.Tests/DataEntry.Tests.vbproj" />
+    <Project Path="src/DataEntry/DataEntry.vbproj" />
+  </Folder>
+</Solution>

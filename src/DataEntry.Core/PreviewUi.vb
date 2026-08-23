@@ -164,6 +164,14 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
         Private Sub MenuOpen()
             Dim dlg As New OpenDialog()
             dlg.Title = "Open DSL File"
+            dlg.OpenMode = OpenMode.File
+            If Not String.IsNullOrEmpty(_defFile) AndAlso File.Exists(_defFile) Then
+                dlg.Path = Path.GetDirectoryName(Path.GetFullPath(_defFile))
+            Else
+                dlg.Path = Directory.GetCurrentDirectory()
+            End If
+            dlg.AllowedTypes.Add(New AllowedType("DSL Definition Files (*.def)", ".def"))
+            dlg.AllowedTypes.Add(New AllowedType("All Files (*.*)", ".*"))
             _app.Run(dlg, Nothing)
 
             If dlg.FilePaths IsNot Nothing AndAlso dlg.FilePaths.Count > 0 Then

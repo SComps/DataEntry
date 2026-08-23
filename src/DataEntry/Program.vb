@@ -108,6 +108,10 @@ Namespace DataEntry
             Dim app = Application.Create().Init()
             Dim dlg As New OpenDialog()
             dlg.Title = "Open DSL Definition File"
+            dlg.OpenMode = OpenMode.File
+            dlg.Path = Directory.GetCurrentDirectory()
+            dlg.AllowedTypes.Add(New AllowedType("DSL Definition Files (*.def)", ".def"))
+            dlg.AllowedTypes.Add(New AllowedType("All Files (*.*)", ".*"))
             app.Run(dlg, Nothing)
             If dlg.FilePaths IsNot Nothing AndAlso dlg.FilePaths.Count > 0 Then
                 chosen = dlg.FilePaths(0)

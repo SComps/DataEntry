@@ -1,6 +1,6 @@
-* customer.def
-* Customer master record — name, address, contact details.
-* Demonstrates multi-field layout, phone/zip masking, and state upper-case.
+* ─────────────────────────────────────────────────────────────────────────────
+* customer.def  —  Customer Master Record Entry
+* ─────────────────────────────────────────────────────────────────────────────
 
 DATA-SECTION
     FILE customers.dat APPEND LRECL=120 LEND=CRLF
@@ -27,31 +27,67 @@ RECORD CUSTOMER
 
 SCREEN-SECTION
 SCREEN CUSTOMER-ENTRY COLOR=WhiteOnBlue
-    PROMPT "Customer ID:"   ROW=2  COL=2
-    FIELD ROW=2 COL=15 LEN=6 INTO CUSTOMER.CUSTID
+
+    * ── Title banner ────────────────────────────────────────────────────────
+    PROMPT "╔══════════════════════════════════════════════════════════════════╗" ROW=1 COL=6
+        COLOR=WhiteOnBlue
+    PROMPT "║                   CUSTOMER MASTER FILE                          ║" ROW=2 COL=6
+        COLOR=BrightYellowOnBlue
+    PROMPT "║                  New / Edit Customer Record                     ║" ROW=3 COL=6
+        COLOR=WhiteOnBlue
+    PROMPT "╚══════════════════════════════════════════════════════════════════╝" ROW=4 COL=6
+        COLOR=WhiteOnBlue
+    PROMPT "  F1=Help  F3=Clear  Ctrl+S=Save  Shift+PgUp/Dn=Navigate  F10=Quit  " ROW=5 COL=6
+        COLOR=DarkGrayOnBlue
+
+    * ── Identification section ───────────────────────────────────────────────
+    PROMPT "┌─ Identification ───────────────────────────────────────────────────┐" ROW=7 COL=5
+        COLOR=CyanOnBlue
+    PROMPT "Customer ID :" ROW=8  COL=7
+        COLOR=WhiteOnBlue
+    FIELD ROW=8 COL=21 LEN=6 INTO CUSTOMER.CUSTID
         NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "└───────────────────────────────────────────────────────────────────┘" ROW=9  COL=5
+        COLOR=CyanOnBlue
 
-    PROMPT "Last Name:"     ROW=4  COL=2
-    FIELD ROW=4 COL=13 LEN=20 INTO CUSTOMER.LNAME
-
-    PROMPT "First Name:"    ROW=4  COL=36
-    FIELD ROW=4 COL=48 LEN=15 INTO CUSTOMER.FNAME
-
-    PROMPT "Address:"       ROW=6  COL=2
-    FIELD ROW=6 COL=11 LEN=25 INTO CUSTOMER.ADDR1
-
-    PROMPT "City:"          ROW=8  COL=2
-    FIELD ROW=8 COL=8  LEN=18 INTO CUSTOMER.CITY
-
-    PROMPT "State:"         ROW=8  COL=29
-    FIELD ROW=8 COL=36 LEN=2  INTO CUSTOMER.STATE
-
-    PROMPT "Zip:"           ROW=8  COL=42
-    FIELD ROW=8 COL=47 LEN=5  INTO CUSTOMER.ZIP
-
-    PROMPT "Phone:"         ROW=10 COL=2
-    FIELD ROW=10 COL=9 LEN=12 INTO CUSTOMER.PHONE
+    * ── Name section ─────────────────────────────────────────────────────────
+    PROMPT "┌─ Name ─────────────────────────────────────────────────────────────┐" ROW=11 COL=5
+        COLOR=CyanOnBlue
+    PROMPT "Last Name   :" ROW=12 COL=7
+    FIELD ROW=12 COL=21 LEN=20 INTO CUSTOMER.LNAME
         NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "First Name  :" ROW=12 COL=44
+    FIELD ROW=12 COL=58 LEN=15 INTO CUSTOMER.FNAME
+        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "└───────────────────────────────────────────────────────────────────┘" ROW=13 COL=5
+        COLOR=CyanOnBlue
 
-    PROMPT "Email:"         ROW=10 COL=26
-    FIELD ROW=10 COL=33 LEN=17 INTO CUSTOMER.EMAIL
+    * ── Address section ──────────────────────────────────────────────────────
+    PROMPT "┌─ Address ──────────────────────────────────────────────────────────┐" ROW=15 COL=5
+        COLOR=CyanOnBlue
+    PROMPT "Address     :" ROW=16 COL=7
+    FIELD ROW=16 COL=21 LEN=25 INTO CUSTOMER.ADDR1
+        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "City        :" ROW=17 COL=7
+    FIELD ROW=17 COL=21 LEN=18 INTO CUSTOMER.CITY
+        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "State       :" ROW=18 COL=7
+    FIELD ROW=18 COL=21 LEN=2  INTO CUSTOMER.STATE
+        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "Zip         :" ROW=18 COL=27
+    FIELD ROW=18 COL=41 LEN=5  INTO CUSTOMER.ZIP
+        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "└───────────────────────────────────────────────────────────────────┘" ROW=19 COL=5
+        COLOR=CyanOnBlue
+
+    * ── Contact section ──────────────────────────────────────────────────────
+    PROMPT "┌─ Contact ──────────────────────────────────────────────────────────┐" ROW=21 COL=5
+        COLOR=CyanOnBlue
+    PROMPT "Phone       :" ROW=22 COL=7
+    FIELD ROW=22 COL=21 LEN=12 INTO CUSTOMER.PHONE
+        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "Email       :" ROW=22 COL=37
+    FIELD ROW=22 COL=51 LEN=17 INTO CUSTOMER.EMAIL
+        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "└───────────────────────────────────────────────────────────────────┘" ROW=23 COL=5
+        COLOR=CyanOnBlue

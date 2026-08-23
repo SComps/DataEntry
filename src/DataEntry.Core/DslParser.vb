@@ -415,7 +415,7 @@ Imports System.Collections.Generic
 
         ''' <summary>Consume optional COLOR= FG= BG= tokens from the current line, returning a ColorSpec.</summary>
         Private Function ParseColorAttribs(defaults As ColorSpec) As ColorSpec
-            Dim spec As New ColorSpec With {.Fg = defaults.Fg, .Bg = defaults.Bg}
+            Dim spec As New ColorSpec With {.Fg = If(defaults Is Nothing, "", defaults.Fg), .Bg = If(defaults Is Nothing, "", defaults.Bg)}
             Do While Not AtLineEnd() AndAlso Not AtEof()
                 If IsKeyword("COLOR") Then
                     Consume() : Expect(TokenType.Equals)

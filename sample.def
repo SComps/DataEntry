@@ -1,5 +1,6 @@
-* sample.def — Customer data entry form example
-* Demonstrates all major DSL features
+* ─────────────────────────────────────────────────────────────────────────────
+* sample.def  —  Simple Customer Entry Form
+* ─────────────────────────────────────────────────────────────────────────────
 
 DATA-SECTION
     FILE output.dat APPEND LRECL=130 LEND=CRLF
@@ -22,24 +23,49 @@ RECORD CUST
 
 SCREEN-SECTION
 SCREEN CUST-ENTRY COLOR=WhiteOnBlue
-    PROMPT "Customer Name:"  ROW=2  COL=2
-    FIELD ROW=2 COL=18 LEN=30 INTO CUST.CNAME
 
-    PROMPT "Address Line 1:" ROW=4  COL=2
-    FIELD ROW=4 COL=18 LEN=30 INTO CUST.CADDR1
+    * ── Title banner ────────────────────────────────────────────────
+    PROMPT "╔══════════════════════════════════════════════════════╗" ROW=1 COL=13
+        COLOR=WhiteOnBlue
+    PROMPT "║          CUSTOMER ENTRY — SAMPLE FORM                ║" ROW=2 COL=13
+        COLOR=YellowOnBlue
+    PROMPT "╚══════════════════════════════════════════════════════╝" ROW=3 COL=13
+        COLOR=WhiteOnBlue
+    PROMPT "F1=Help  F3=Clear  Ctrl+S=Save  Shift+PgUp/Dn=Navigate  F10=Quit" ROW=4 COL=7
+        COLOR=DarkGrayOnBlue
 
-    PROMPT "Address Line 2:" ROW=5  COL=2
-    FIELD ROW=5 COL=18 LEN=30 INTO CUST.CADDR2
+    * ── Section divider ─────────────────────────────────────────────
+    PROMPT "┌─ Contact Details ───────────────────────────────────────────────────────┐" ROW=6 COL=2
+        COLOR=CyanOnBlue
 
-    PROMPT "City:"           ROW=7  COL=2
-    FIELD ROW=7 COL=8  LEN=20 INTO CUST.CCITY
-
-    PROMPT "State:"          ROW=7  COL=30
-    FIELD ROW=7 COL=37 LEN=2  INTO CUST.CSTATE
-
-    PROMPT "Zip:"            ROW=7  COL=42
-    FIELD ROW=7 COL=47 LEN=5  INTO CUST.CZIP
-
-    PROMPT "Phone:"          ROW=9  COL=2
-    FIELD ROW=9 COL=9  LEN=13 INTO CUST.CPHONE
+    * ── Fields ──────────────────────────────────────────────────────
+    PROMPT "Name   :" ROW=7  COL=4
+    FIELD ROW=7 COL=14 LEN=30 INTO CUST.CNAME
         NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+
+    PROMPT "Address:" ROW=9  COL=4
+    FIELD ROW=9 COL=14 LEN=30 INTO CUST.CADDR1
+        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+
+    PROMPT "        " ROW=10 COL=4
+    FIELD ROW=10 COL=14 LEN=30 INTO CUST.CADDR2
+        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+
+    PROMPT "City   :" ROW=12 COL=4
+    FIELD ROW=12 COL=14 LEN=20 INTO CUST.CCITY
+        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+
+    PROMPT "State  :" ROW=12 COL=37
+    FIELD ROW=12 COL=47 LEN=2  INTO CUST.CSTATE
+        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+
+    PROMPT "Zip    :" ROW=12 COL=52
+    FIELD ROW=12 COL=62 LEN=5  INTO CUST.CZIP
+        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+
+    PROMPT "Phone  :" ROW=14 COL=4
+    FIELD ROW=14 COL=14 LEN=12 INTO CUST.CPHONE
+        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+
+    PROMPT "└─────────────────────────────────────────────────────────────────────────┘" ROW=16 COL=2
+        COLOR=CyanOnBlue

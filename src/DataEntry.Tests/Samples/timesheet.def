@@ -1,6 +1,6 @@
-* timesheet.def
-* Weekly employee timesheet — employee ID, week ending date, and daily hours.
-* Demonstrates numeric fields, zero-fill, and multiple screens.
+* ─────────────────────────────────────────────────────────────────────────────
+* timesheet.def  —  Weekly Employee Timesheet Entry
+* ─────────────────────────────────────────────────────────────────────────────
 
 DATA-SECTION
     FILE timesheets.dat NOAPPEND LRECL=65 LEND=LF
@@ -34,45 +34,120 @@ RECORD TIMESHEET
     FORMAT=XXXXXXXXXXXX.
 
 SCREEN-SECTION
+
+* ─────────────────────────────────────────────────────────────────────────────
+* Screen 1 — Employee & Job Identification
+* ─────────────────────────────────────────────────────────────────────────────
 SCREEN TIMESHEET-ENTRY FG=White BG=DarkGreen
-    PROMPT "Employee ID:"  ROW=2  COL=2
-    FIELD ROW=2 COL=15 LEN=6 INTO TIMESHEET.EMPID
+
+    * ── Title banner ────────────────────────────────────────────────────────
+    PROMPT "╔══════════════════════════════════════════════════════════════════╗" ROW=1 COL=7
+        COLOR=WhiteOnDarkGreen
+    PROMPT "║              EMPLOYEE TIMESHEET SYSTEM          (1 of 2)        ║" ROW=2 COL=7
+        COLOR=BrightYellowOnDarkGreen
+    PROMPT "║                Employee & Job Identification                    ║" ROW=3 COL=7
+        COLOR=WhiteOnDarkGreen
+    PROMPT "╚══════════════════════════════════════════════════════════════════╝" ROW=4 COL=7
+        COLOR=WhiteOnDarkGreen
+    PROMPT "  F1=Help  F3=Clear  Ctrl+S=Save  PgDn=Next Screen  F10=Quit  " ROW=5 COL=9
+        COLOR=DarkGrayOnDarkGreen
+
+    * ── Employee ID panel ────────────────────────────────────────────────────
+    PROMPT "┌─ Employee ─────────────────────────────────────────────────────────┐" ROW=7 COL=6
+        COLOR=CyanOnDarkGreen
+    PROMPT "Employee ID :" ROW=8 COL=8
+        COLOR=WhiteOnDarkGreen
+    FIELD ROW=8 COL=22 LEN=6 INTO TIMESHEET.EMPID
         NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "└──────────────────────────────────────────────────────────────────┘" ROW=9 COL=6
+        COLOR=CyanOnDarkGreen
 
-    PROMPT "Week Ending:"  ROW=2  COL=24
-    FIELD ROW=2 COL=37 LEN=8 INTO TIMESHEET.WEEKEND
+    * ── Week & job panel ─────────────────────────────────────────────────────
+    PROMPT "┌─ Week & Job ───────────────────────────────────────────────────────┐" ROW=11 COL=6
+        COLOR=CyanOnDarkGreen
+    PROMPT "Week Ending :" ROW=12 COL=8
+        COLOR=WhiteOnDarkGreen
+    FIELD ROW=12 COL=22 LEN=8 INTO TIMESHEET.WEEKEND
         NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "(MM/DD/YYYY)" ROW=12 COL=32
+        COLOR=DarkGrayOnDarkGreen
+    PROMPT "Job Code    :" ROW=13 COL=8
+        COLOR=WhiteOnDarkGreen
+    FIELD ROW=13 COL=22 LEN=5 INTO TIMESHEET.JOBCODE
+        NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "└──────────────────────────────────────────────────────────────────┘" ROW=14 COL=6
+        COLOR=CyanOnDarkGreen
 
-    PROMPT "Job Code:"     ROW=2  COL=48
-    FIELD ROW=2 COL=58 LEN=5 INTO TIMESHEET.JOBCODE
+    PROMPT "  Press PgDn to continue to daily hours entry ▶" ROW=16 COL=16
+        COLOR=CyanOnDarkGreen
 
+* ─────────────────────────────────────────────────────────────────────────────
+* Screen 2 — Daily Hours Entry
+* ─────────────────────────────────────────────────────────────────────────────
 SCREEN HOURS-ENTRY FG=White BG=DarkGreen
-    PROMPT "Monday:"    ROW=4  COL=2
-    FIELD ROW=4 COL=10 LEN=4 INTO TIMESHEET.MON
 
-    PROMPT "Tuesday:"   ROW=5  COL=2
-    FIELD ROW=5 COL=11 LEN=4 INTO TIMESHEET.TUE
+    * ── Title banner ────────────────────────────────────────────────────────
+    PROMPT "╔══════════════════════════════════════════════════════════════════╗" ROW=1 COL=7
+        COLOR=WhiteOnDarkGreen
+    PROMPT "║              EMPLOYEE TIMESHEET SYSTEM          (2 of 2)        ║" ROW=2 COL=7
+        COLOR=BrightYellowOnDarkGreen
+    PROMPT "║                   Daily Hours Entry                             ║" ROW=3 COL=7
+        COLOR=WhiteOnDarkGreen
+    PROMPT "╚══════════════════════════════════════════════════════════════════╝" ROW=4 COL=7
+        COLOR=WhiteOnDarkGreen
+    PROMPT "  F1=Help  F3=Clear  Ctrl+S=Save  PgUp=Prev Screen  F10=Quit  " ROW=5 COL=9
+        COLOR=DarkGrayOnDarkGreen
 
-    PROMPT "Wednesday:" ROW=6  COL=2
-    FIELD ROW=6 COL=13 LEN=4 INTO TIMESHEET.WED
+    * ── Daily hours panel ────────────────────────────────────────────────────
+    PROMPT "┌─ Daily Hours (format: HH.MM) ──────────────────────────────────────┐" ROW=7 COL=6
+        COLOR=CyanOnDarkGreen
+    PROMPT "Monday    :" ROW=8  COL=8
+        COLOR=WhiteOnDarkGreen
+    FIELD ROW=8 COL=20 LEN=4 INTO TIMESHEET.MON
+        NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "Tuesday   :" ROW=9  COL=8
+        COLOR=WhiteOnDarkGreen
+    FIELD ROW=9 COL=20 LEN=4 INTO TIMESHEET.TUE
+        NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "Wednesday :" ROW=10 COL=8
+        COLOR=WhiteOnDarkGreen
+    FIELD ROW=10 COL=20 LEN=4 INTO TIMESHEET.WED
+        NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "Thursday  :" ROW=11 COL=8
+        COLOR=WhiteOnDarkGreen
+    FIELD ROW=11 COL=20 LEN=4 INTO TIMESHEET.THU
+        NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "Friday    :" ROW=12 COL=8
+        COLOR=WhiteOnDarkGreen
+    FIELD ROW=12 COL=20 LEN=4 INTO TIMESHEET.FRI
+        NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "Saturday  :" ROW=13 COL=8
+        COLOR=WhiteOnDarkGreen
+    FIELD ROW=13 COL=20 LEN=4 INTO TIMESHEET.SAT
+        NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "Sunday    :" ROW=14 COL=8
+        COLOR=WhiteOnDarkGreen
+    FIELD ROW=14 COL=20 LEN=4 INTO TIMESHEET.SUN
+        NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "└──────────────────────────────────────────────────────────────────┘" ROW=15 COL=6
+        COLOR=CyanOnDarkGreen
 
-    PROMPT "Thursday:"  ROW=7  COL=2
-    FIELD ROW=7 COL=12 LEN=4 INTO TIMESHEET.THU
-
-    PROMPT "Friday:"    ROW=8  COL=2
-    FIELD ROW=8 COL=10 LEN=4 INTO TIMESHEET.FRI
-
-    PROMPT "Saturday:"  ROW=9  COL=2
-    FIELD ROW=9 COL=12 LEN=4 INTO TIMESHEET.SAT
-
-    PROMPT "Sunday:"    ROW=10 COL=2
-    FIELD ROW=10 COL=10 LEN=4 INTO TIMESHEET.SUN
-
-    PROMPT "Total:"     ROW=12 COL=2
-    FIELD ROW=12 COL=9  LEN=5 INTO TIMESHEET.TOTALS
-
-    PROMPT "Approved:"  ROW=12 COL=17
-    FIELD ROW=12 COL=27 LEN=1 INTO TIMESHEET.APPRVD
-
-    PROMPT "Notes:"     ROW=14 COL=2
-    FIELD ROW=14 COL=9  LEN=12 INTO TIMESHEET.NOTES
+    * ── Summary & approval panel ─────────────────────────────────────────────
+    PROMPT "┌─ Summary & Approval ───────────────────────────────────────────────┐" ROW=17 COL=6
+        COLOR=CyanOnDarkGreen
+    PROMPT "Total Hours :" ROW=18 COL=8
+        COLOR=WhiteOnDarkGreen
+    FIELD ROW=18 COL=22 LEN=5 INTO TIMESHEET.TOTALS
+        NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "Approved    :" ROW=18 COL=30
+        COLOR=WhiteOnDarkGreen
+    FIELD ROW=18 COL=44 LEN=1 INTO TIMESHEET.APPRVD
+        NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "(Y/N)" ROW=18 COL=47
+        COLOR=DarkGrayOnDarkGreen
+    PROMPT "Notes       :" ROW=19 COL=8
+        COLOR=WhiteOnDarkGreen
+    FIELD ROW=19 COL=22 LEN=12 INTO TIMESHEET.NOTES
+        NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "└──────────────────────────────────────────────────────────────────┘" ROW=20 COL=6
+        COLOR=CyanOnDarkGreen

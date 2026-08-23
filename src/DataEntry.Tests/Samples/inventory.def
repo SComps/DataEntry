@@ -1,6 +1,6 @@
-* inventory.def
-* Inventory item entry — SKU, description, quantity, price, location.
-* Demonstrates VALIDATE WITH and numeric formatting with zero-fill.
+* ─────────────────────────────────────────────────────────────────────────────
+* inventory.def  —  Inventory Item Entry Form
+* ─────────────────────────────────────────────────────────────────────────────
 
 DATA-SECTION
     FILE inventory.dat APPEND LRECL=80 LEND=CRLF
@@ -25,29 +25,65 @@ RECORD ITEM
 
 SCREEN-SECTION
 SCREEN INVENTORY-ENTRY COLOR=WhiteOnDarkBlue
-    PROMPT "SKU:"         ROW=2  COL=2
-    FIELD ROW=2 COL=7 LEN=10 INTO ITEM.SKU VALIDATE WITH CHECKSKU
+
+    * ── Title banner ────────────────────────────────────────────────────────
+    PROMPT "╔═══════════════════════════════════════════════════════════════════╗" ROW=1 COL=5
+        COLOR=WhiteOnDarkBlue
+    PROMPT "║              INVENTORY MANAGEMENT SYSTEM                         ║" ROW=2 COL=5
+        COLOR=BrightYellowOnDarkBlue
+    PROMPT "║                  Stock Item Entry Form                           ║" ROW=3 COL=5
+        COLOR=WhiteOnDarkBlue
+    PROMPT "╚═══════════════════════════════════════════════════════════════════╝" ROW=4 COL=5
+        COLOR=WhiteOnDarkBlue
+    PROMPT " F1=Help  F3=Clear  Ctrl+S=Save  Shift+PgUp/Dn=Navigate  F10=Quit " ROW=5 COL=6
+        COLOR=DarkGrayOnDarkBlue
+
+    * ── Item identification ───────────────────────────────────────────────────
+    PROMPT "┌─ Item Identification ──────────────────────────────────────────────┐" ROW=7 COL=4
+        COLOR=CyanOnDarkBlue
+    PROMPT "SKU Number  :" ROW=8 COL=6
+        COLOR=WhiteOnDarkBlue
+    FIELD ROW=8 COL=20 LEN=10 INTO ITEM.SKU VALIDATE WITH CHECKSKU
         NORMAL=WhiteOnDarkBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
-
-    PROMPT "Description:" ROW=4  COL=2
-    FIELD ROW=4 COL=15 LEN=30 INTO ITEM.DESCR
-
-    PROMPT "Qty On Hand:" ROW=6  COL=2
-    FIELD ROW=6 COL=15 LEN=6 INTO ITEM.QTY VALIDATE WITH CHECKQTY
+    PROMPT "Description :" ROW=9 COL=6
+        COLOR=WhiteOnDarkBlue
+    FIELD ROW=9 COL=20 LEN=30 INTO ITEM.DESCR
         NORMAL=WhiteOnDarkBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "└──────────────────────────────────────────────────────────────────┘" ROW=10 COL=4
+        COLOR=CyanOnDarkBlue
 
-    PROMPT "Unit Price:"  ROW=6  COL=25
-    FIELD ROW=6 COL=37 LEN=9 INTO ITEM.PRICE VALIDATE WITH CHECKPRICE
+    * ── Stock levels ─────────────────────────────────────────────────────────
+    PROMPT "┌─ Stock Levels ─────────────────────────────────────────────────────┐" ROW=12 COL=4
+        COLOR=CyanOnDarkBlue
+    PROMPT "Qty On Hand :" ROW=13 COL=6
+        COLOR=WhiteOnDarkBlue
+    FIELD ROW=13 COL=20 LEN=6 INTO ITEM.QTY VALIDATE WITH CHECKQTY
         NORMAL=WhiteOnDarkBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "Reorder At  :" ROW=13 COL=30
+        COLOR=WhiteOnDarkBlue
+    FIELD ROW=13 COL=44 LEN=6 INTO ITEM.REORDER
+        NORMAL=WhiteOnDarkBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "Unit Price  :" ROW=14 COL=6
+        COLOR=WhiteOnDarkBlue
+    FIELD ROW=14 COL=20 LEN=9 INTO ITEM.PRICE VALIDATE WITH CHECKPRICE
+        NORMAL=WhiteOnDarkBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "└──────────────────────────────────────────────────────────────────┘" ROW=15 COL=4
+        COLOR=CyanOnDarkBlue
 
-    PROMPT "Location:"    ROW=8  COL=2
-    FIELD ROW=8 COL=12 LEN=8 INTO ITEM.LOCATN
-
-    PROMPT "Active:"      ROW=8  COL=24
-    FIELD ROW=8 COL=32 LEN=1 INTO ITEM.ACTIVE
-
-    PROMPT "Reorder At:"  ROW=10 COL=2
-    FIELD ROW=10 COL=14 LEN=6 INTO ITEM.REORDER
-
-    PROMPT "Supplier:"    ROW=10 COL=24
-    FIELD ROW=10 COL=34 LEN=10 INTO ITEM.SUPPLR
+    * ── Storage & supplier ───────────────────────────────────────────────────
+    PROMPT "┌─ Storage & Supplier ───────────────────────────────────────────────┐" ROW=17 COL=4
+        COLOR=CyanOnDarkBlue
+    PROMPT "Location    :" ROW=18 COL=6
+        COLOR=WhiteOnDarkBlue
+    FIELD ROW=18 COL=20 LEN=8 INTO ITEM.LOCATN
+        NORMAL=WhiteOnDarkBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "Active (Y/N):" ROW=18 COL=32
+        COLOR=WhiteOnDarkBlue
+    FIELD ROW=18 COL=46 LEN=1 INTO ITEM.ACTIVE
+        NORMAL=WhiteOnDarkBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "Supplier    :" ROW=19 COL=6
+        COLOR=WhiteOnDarkBlue
+    FIELD ROW=19 COL=20 LEN=10 INTO ITEM.SUPPLR
+        NORMAL=WhiteOnDarkBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
+    PROMPT "└──────────────────────────────────────────────────────────────────┘" ROW=20 COL=4
+        COLOR=CyanOnDarkBlue

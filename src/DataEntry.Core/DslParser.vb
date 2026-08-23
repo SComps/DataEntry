@@ -287,7 +287,7 @@ Imports System.Collections.Generic
 
             SkipNewlines()
 
-            ' Fields until next SCREEN or end of SCREEN-SECTION or EOF
+            ' Fields and Prompts until next SCREEN or end of SCREEN-SECTION or EOF
             Do While Not AtEof() AndAlso Not IsKeyword("SCREEN") AndAlso
                      Not IsKeyword("DATA-SECTION") AndAlso Not IsKeyword("SCREEN-SECTION")
 
@@ -298,6 +298,8 @@ Imports System.Collections.Generic
 
                 If IsKeyword("FIELD") Then
                     scr.Fields.Add(ParseScreenField())
+                ElseIf IsKeyword("PROMPT") OrElse IsKeyword("LABEL") Then
+                    scr.Prompts.Add(ParseScreenPrompt())
                 Else
                     Exit Do
                 End If
@@ -306,19 +308,53 @@ Imports System.Collections.Generic
             Return scr
         End Function
 
-        Private Function ParseScreenField() As ScreenField
-            Dim fld As New ScreenField With {.Line = Current().Line}
-            Consume()  ' eat FIELD
-            fld.Label = ConsumeString("field label")
+        Private Function ParseScreenPrompt() As ScreenPrompt
+            Dim pr As New ScreenPrompt With {.Line = Current().Line}
+            Consume()  ' eat PROMPT or LABEL
+            pr.Text = ConsumeString("prompt text")
 
-            ' ROW= COL= LEN= INTO RECORD.FIELD  VALIDATE WITH <func>  on same line
             Do While Not AtLineEnd() AndAlso Not AtEof()
                 If IsKeyword("ROW") Then
                     Consume() : Expect(TokenType.Equals)
-                    fld.Row = ConsumeInt("ROW value")
+                    pr.Row = ConsumeInt("ROW value")
                 ElseIf IsKeyword("COL") Then
                     Consume() : Expect(TokenType.Equals)
+                    pr.Col = ConsumeInt("COL value")
+                Else
+                    Exit Do
+                End If
+            Loop
+
+            SkipNewlines()
+            If Not AtEof() AndAlso (IsKeyword("COLOR") OrElse IsKeyword("FG") OrElse IsKeyword("BG") OrElse IsKeyword("NORMAL")) Then
+                pr.Color = ParseColorAttribs(Nothing)
+                SkipNewlines()
+            End If
+
+            Return pr
+        End Function
+
+        Private Function ParseScreenField() As ScreenField
+            Dim fld As New ScreenField With {.Line = Current().Line}
+            Consume()  ' eat FIELD
+            If Current().Type = TokenType.StringLit Then
+                fld.Label = ConsumeString("field label")
+            End If
+
+            ' ROW= COL= PROMPT_ROW= PROMPT_COL= LEN= INTO RECORD.FIELD  VALIDATE WITH <func>  on same line
+            Do While Not AtLineEnd() AndAlso Not AtEof()
+                If IsKeyword("ROW") OrElse IsKeyword("FIELD_ROW") Then
+                    Consume() : Expect(TokenType.Equals)
+                    fld.Row = ConsumeInt("ROW value")
+                ElseIf IsKeyword("COL") OrElse IsKeyword("FIELD_COL") Then
+                    Consume() : Expect(TokenType.Equals)
                     fld.Col = ConsumeInt("COL value")
+                ElseIf IsKeyword("PROMPT_ROW") OrElse IsKeyword("LABEL_ROW") Then
+                    Consume() : Expect(TokenType.Equals)
+                    fld.PromptRow = ConsumeInt("PROMPT_ROW value")
+                ElseIf IsKeyword("PROMPT_COL") OrElse IsKeyword("LABEL_COL") Then
+                    Consume() : Expect(TokenType.Equals)
+                    fld.PromptCol = ConsumeInt("PROMPT_COL value")
                 ElseIf IsKeyword("LEN") Then
                     Consume() : Expect(TokenType.Equals)
                     fld.Len = ConsumeInt("LEN value")
@@ -342,6 +378,7 @@ Imports System.Collections.Generic
             ' Optional color attributes on continuation lines (NORMAL= FOCUS= ERROR=)
             SkipNewlines()
             Do While Not AtEof() AndAlso Not IsKeyword("FIELD") AndAlso
+                     Not IsKeyword("PROMPT") AndAlso Not IsKeyword("LABEL") AndAlso
                      Not IsKeyword("SCREEN") AndAlso Not IsKeyword("DATA-SECTION") AndAlso
                      Not IsKeyword("SCREEN-SECTION")
 

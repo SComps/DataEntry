@@ -88,6 +88,14 @@ Imports System.Collections.Generic
 
         ' ── SCREEN-SECTION checks ─────────────────────────────────────────────
 
+        Private Class RenderedSpan
+            Public Property Name As String = ""
+            Public Property Row As Integer
+            Public Property StartCol As Integer
+            Public Property EndCol As Integer
+            Public Property Line As Integer
+        End Class
+
         Private Sub CheckScreenSections()
             ' Build a lookup of all known record/field names for INTO validation
             Dim recordMap As New Dictionary(Of String, HashSet(Of String))(StringComparer.OrdinalIgnoreCase)
@@ -105,15 +113,40 @@ Imports System.Collections.Generic
                     AddError(scr.Line, 0, $"Duplicate screen name '{scr.Name}'.")
                 End If
 
+                Dim spans As New List(Of RenderedSpan)
+
+                ' Check standalone prompts
+                For Each pr In scr.Prompts
+                    CheckColorSpec(pr.Line, $"prompt '{pr.Text}'", pr.Color)
+                    Dim txtLen = Math.Max(1, pr.Text.Length)
+                    Dim startCol = pr.Col
+                    Dim endCol = pr.Col + txtLen - 1
+                    If pr.Row < 1 OrElse pr.Row > 24 OrElse pr.Col < 1 OrElse endCol > 80 Then
+                        AddError(pr.Line, 0,
+                            $"Prompt '{pr.Text}' (ROW={pr.Row} COL={startCol}..{endCol}) exceeds screen boundaries (80 columns x 24 rows).")
+                    End If
+                    spans.Add(New RenderedSpan With {
+                        .Name = $"Prompt '{pr.Text}'",
+                        .Row = pr.Row,
+                        .StartCol = startCol,
+                        .EndCol = endCol,
+                        .Line = pr.Line
+                    })
+                Next
+
                 For Each sfld In scr.Fields
+                    Dim fieldId = If(Not String.IsNullOrEmpty(sfld.Label),
+                                     $"Field '{sfld.Label}'",
+                                     $"Field '{sfld.IntoRecord}.{sfld.IntoField}'")
+
                     ' INTO cross-reference
                     If Not String.IsNullOrEmpty(sfld.IntoRecord) Then
                         If Not recordMap.ContainsKey(sfld.IntoRecord) Then
                             AddError(sfld.Line, 0,
-                                $"Field '{sfld.Label}' references unknown record '{sfld.IntoRecord}'.")
+                                $"{fieldId} references unknown record '{sfld.IntoRecord}'.")
                         ElseIf Not recordMap(sfld.IntoRecord).Contains(sfld.IntoField) Then
                             AddError(sfld.Line, 0,
-                                $"Field '{sfld.Label}' references unknown field " &
+                                $"{fieldId} references unknown field " &
                                 $"'{sfld.IntoRecord}.{sfld.IntoField}'.")
                         End If
                     End If
@@ -129,6 +162,64 @@ Imports System.Collections.Generic
                     CheckColorSpec(sfld.Line, "NORMAL", sfld.NormalColor)
                     CheckColorSpec(sfld.Line, "FOCUS", sfld.FocusColor)
                     CheckColorSpec(sfld.Line, "ERROR", sfld.ErrorColor)
+
+                    ' Calculate spans and screen bounds for field prompt and data box
+                    Dim tfRow As Integer, tfCol As Integer
+                    If Not String.IsNullOrEmpty(sfld.Label) Then
+                        Dim pRow = If(sfld.PromptRow <> -1, sfld.PromptRow, sfld.Row)
+                        Dim pCol = If(sfld.PromptCol <> -1, sfld.PromptCol, sfld.Col)
+                        Dim pLen = sfld.Label.Length + 1
+                        Dim pEnd = pCol + pLen - 1
+                        If pRow < 1 OrElse pRow > 24 OrElse pCol < 1 OrElse pEnd > 80 Then
+                            AddError(sfld.Line, 0,
+                                $"Prompt '{sfld.Label}' (ROW={pRow} COL={pCol}..{pEnd}) exceeds screen boundaries (80 columns x 24 rows).")
+                        End If
+                        spans.Add(New RenderedSpan With {
+                            .Name = $"Prompt '{sfld.Label}'",
+                            .Row = pRow,
+                            .StartCol = pCol,
+                            .EndCol = pEnd,
+                            .Line = sfld.Line
+                        })
+
+                        If sfld.PromptRow <> -1 AndAlso sfld.PromptCol <> -1 Then
+                            tfRow = sfld.Row
+                            tfCol = sfld.Col
+                        Else
+                            tfRow = sfld.Row
+                            tfCol = sfld.Col + sfld.Label.Length + 2
+                        End If
+                    Else
+                        tfRow = sfld.Row
+                        tfCol = sfld.Col
+                    End If
+
+                    Dim tfEnd = tfCol + Math.Max(1, sfld.Len) - 1
+                    If tfRow < 1 OrElse tfRow > 24 OrElse tfCol < 1 OrElse tfEnd > 80 Then
+                        AddError(sfld.Line, 0,
+                            $"{fieldId} (ROW={tfRow} COL={tfCol}..{tfEnd}) exceeds screen boundaries (80 columns x 24 rows).")
+                    End If
+                    spans.Add(New RenderedSpan With {
+                        .Name = fieldId,
+                        .Row = tfRow,
+                        .StartCol = tfCol,
+                        .EndCol = tfEnd,
+                        .Line = sfld.Line
+                    })
+                Next
+
+                ' Check for overlaps among all spans on this screen
+                For i = 0 To spans.Count - 1
+                    For j = i + 1 To spans.Count - 1
+                        Dim s1 = spans(i)
+                        Dim s2 = spans(j)
+                        If s1.Row = s2.Row Then
+                            If s1.StartCol <= s2.EndCol AndAlso s1.EndCol >= s2.StartCol Then
+                                AddError(Math.Max(s1.Line, s2.Line), 0,
+                                    $"{s1.Name} (COL={s1.StartCol}..{s1.EndCol}) overlaps {s2.Name} (COL={s2.StartCol}..{s2.EndCol}) on ROW {s1.Row}.")
+                            End If
+                        End If
+                    Next
                 Next
 
                 CheckColorSpec(scr.Line, "screen default", scr.DefaultColor)

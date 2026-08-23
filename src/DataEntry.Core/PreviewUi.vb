@@ -74,19 +74,51 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
 
         Private Sub BuildFields(win As Window, scr As ScreenSection)
             _allFields.Clear()
+
+            ' Render standalone PROMPT/LABEL elements
+            For Each pr In scr.Prompts
+                Dim plbl As New Label()
+                plbl.Text  = pr.Text
+                plbl.X     = TPos.Absolute(pr.Col - 1)
+                plbl.Y     = TPos.Absolute(pr.Row)
+                plbl.Width = TDim.Absolute(pr.Text.Length)
+                If pr.Color IsNot Nothing Then
+                    plbl.SetScheme(ColorHelper.MakeScreenScheme(pr.Color))
+                End If
+                win.Add(plbl)
+            Next
+
+            ' Render FIELD elements
             For i = 0 To scr.Fields.Count - 1
                 Dim sfld = scr.Fields(i)
                 Dim isLastField = (i = scr.Fields.Count - 1)
 
-                Dim lbl As New Label()
-                lbl.Text  = sfld.Label & ":"
-                lbl.X     = TPos.Absolute(sfld.Col - 1)
-                lbl.Y     = TPos.Absolute(sfld.Row)   ' row 1-based; +0 because row 1 = Y=1 (menubar at Y=0)
-                lbl.Width = TDim.Absolute(sfld.Label.Length + 1)
+                Dim tf_x As Integer, tf_y As Integer
+                If Not String.IsNullOrEmpty(sfld.Label) Then
+                    Dim pRow = If(sfld.PromptRow <> -1, sfld.PromptRow, sfld.Row)
+                    Dim pCol = If(sfld.PromptCol <> -1, sfld.PromptCol, sfld.Col)
+                    Dim lbl As New Label()
+                    lbl.Text  = sfld.Label & ":"
+                    lbl.X     = TPos.Absolute(pCol - 1)
+                    lbl.Y     = TPos.Absolute(pRow)
+                    lbl.Width = TDim.Absolute(sfld.Label.Length + 1)
+                    win.Add(lbl)
+
+                    If sfld.PromptRow <> -1 AndAlso sfld.PromptCol <> -1 Then
+                        tf_x = sfld.Col - 1
+                        tf_y = sfld.Row
+                    Else
+                        tf_x = sfld.Col - 1 + sfld.Label.Length + 2
+                        tf_y = sfld.Row
+                    End If
+                Else
+                    tf_x = sfld.Col - 1
+                    tf_y = sfld.Row
+                End If
 
                 Dim tf As New TextField()
-                tf.X     = TPos.Absolute(sfld.Col - 1 + sfld.Label.Length + 2)
-                tf.Y     = TPos.Absolute(sfld.Row)
+                tf.X     = TPos.Absolute(tf_x)
+                tf.Y     = TPos.Absolute(tf_y)
                 tf.Width = TDim.Absolute(sfld.Len)
                 tf.Text  = ""
                 tf.SetScheme(ColorHelper.MakeFieldScheme(
@@ -108,6 +140,8 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
                     AddHandler tf.TextChanged, Sub(sender As Object, ev As EventArgs)
                         Dim field = DirectCast(sender, TextField)
                         If field.HasFocus AndAlso field.Text IsNot Nothing AndAlso field.Text.Length = maxLen Then
+                            field.InsertionPoint = 0
+                            field.InsertionPoint = maxLen - 1
                             MessageBox.Query(_app, "Save",
                                 "Record saved. (preview only — no file was written)", "OK")
                             ClearPreviewFields()
@@ -126,25 +160,32 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
                     AddHandler tf.TextChanged, Sub(sender As Object, ev As EventArgs)
                         Dim field = DirectCast(sender, TextField)
                         If field.HasFocus AndAlso field.Text IsNot Nothing AndAlso field.Text.Length = maxLen Then
-                            field.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop)
+                            field.InsertionPoint = 0
+                            field.SuperView?.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop)
                         End If
                     End Sub
                     AddHandler tf.KeyDown, Sub(sender As Object, ev As Key)
                         If ev = Key.Enter Then
                             Dim field = DirectCast(sender, TextField)
-                            field.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop)
+                            field.SuperView?.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop)
                             ev.Handled = True
                         End If
                     End Sub
                 End If
 
-                win.Add(lbl, tf)
+                win.Add(tf)
             Next
         End Sub
 
         ' ── Key handling ──────────────────────────────────────────────────────
 
         Private Sub OnKeyDown(sender As Object, e As Key)
+            If e = Key.F1 Then
+                ShowHelp()
+                e.Handled = True
+                Return
+            End If
+
             If e = Key.F3 Then
                 MessageBox.Query(_app, "Cancel",
                     "Cancel data entry? (preview only — no data was written)", "OK")
@@ -273,6 +314,22 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
             End If
 
             MessageBox.Query(_app, "Publish Result", msg, "Close")
+        End Sub
+
+        Private Sub ShowHelp()
+            Dim helpMsg = "Keyboard Shortcuts & Commands (Preview Mode):" & vbCrLf & vbCrLf &
+                          "  Enter / Tab      - Move to next field" & vbCrLf &
+                          "  Shift+Tab        - Move to previous field" & vbCrLf &
+                          "  Ctrl+S           - Save record (preview mode)" & vbCrLf &
+                          "  F1               - Show this Help screen" & vbCrLf &
+                          "  F3               - Cancel / Clear fields" & vbCrLf &
+                          "  F10              - Compile & Build application" & vbCrLf &
+                          "  PageUp / PageDown- Switch screen section" & vbCrLf &
+                          "  Shift + PageUp   - Simulate previous record" & vbCrLf &
+                          "  Shift + PageDown - Simulate next record" & vbCrLf &
+                          "  Shift + Home     - Simulate first record" & vbCrLf &
+                          "  Shift + End      - Simulate last record"
+            MessageBox.Query(_app, "Help — Commands & Hotkeys", helpMsg, "OK")
         End Sub
 
     End Class

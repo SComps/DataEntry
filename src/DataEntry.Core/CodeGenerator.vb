@@ -110,20 +110,41 @@ Imports System.Collections.Generic
             ' ── WriteRecord ──────────────────────────────────────────────────
             sb.AppendLine("        ''' <summary>Pad/truncate data to LRECL and append it to the output file.</summary>")
             sb.AppendLine("        Public Shared Sub WriteRecord(data As String)")
+            sb.AppendLine("            SaveRecordAtIndex(-1, data)")
+            sb.AppendLine("        End Sub")
+            sb.AppendLine()
+            sb.AppendLine("        ''' <summary>Save record at index (index >= 0 updates existing record; index < 0 appends).</summary>")
+            sb.AppendLine("        Public Shared Sub SaveRecordAtIndex(index As Integer, data As String)")
             sb.AppendLine("            If data.Length < Lrecl Then data = data.PadRight(Lrecl)")
             sb.AppendLine("            If data.Length > Lrecl Then data = data.Substring(0, Lrecl)")
-            ' Always open in append mode: Initialize() handles the NOAPPEND delete.
-            ' Using append here prevents one record from overwriting the previous one.
-            sb.AppendLine("            Using sw As New StreamWriter(FilePath, append:=True, Encoding.ASCII)")
-            sb.AppendLine("                sw.Write(data)")
+            sb.AppendLine("            Dim records = ReadAllRecords()")
+            sb.AppendLine("            If index >= 0 AndAlso index < records.Count Then")
+            sb.AppendLine("                records(index) = data")
+            sb.AppendLine("                WriteAllRecords(records)")
+            sb.AppendLine("            Else")
+            sb.AppendLine("                Using sw As New StreamWriter(FilePath, append:=True, Encoding.ASCII)")
+            sb.AppendLine("                    sw.Write(data)")
             If lendLen > 0 Then
-                sb.AppendLine($"                sw.Write({lendExpr})   ' {ds.Ending} line ending")
+                sb.AppendLine($"                    sw.Write({lendExpr})   ' {ds.Ending} line ending")
             End If
+            sb.AppendLine("                End Using")
+            sb.AppendLine("            End If")
+            sb.AppendLine("        End Sub")
+            sb.AppendLine()
+            sb.AppendLine("        Private Shared Sub WriteAllRecords(records As List(Of String))")
+            sb.AppendLine("            Using sw As New StreamWriter(FilePath, append:=False, Encoding.ASCII)")
+            sb.AppendLine("                For Each rec In records")
+            sb.AppendLine("                    Dim d = rec")
+            sb.AppendLine("                    If d.Length < Lrecl Then d = d.PadRight(Lrecl)")
+            sb.AppendLine("                    If d.Length > Lrecl Then d = d.Substring(0, Lrecl)")
+            sb.AppendLine("                    sw.Write(d)")
+            If lendLen > 0 Then
+                sb.AppendLine($"                    sw.Write({lendExpr})")
+            End If
+            sb.AppendLine("                Next")
             sb.AppendLine("            End Using")
             sb.AppendLine("        End Sub")
             sb.AppendLine()
-
-            ' ── ReadAllRecords ───────────────────────────────────────────────
             sb.AppendLine("        ''' <summary>Read all fixed-length records from the file.</summary>")
             sb.AppendLine("        Public Shared Function ReadAllRecords() As List(Of String)")
             sb.AppendLine("            Dim records As New List(Of String)")
@@ -303,6 +324,31 @@ Imports System.Collections.Generic
                 sb.AppendLine($"            }})")
                 sb.AppendLine()
 
+                ' Standalone prompts
+                Dim promptIdx = 0
+                For Each pr In scr.Prompts
+                    Dim pVar = $"_pr_{MakeSafeName(scr.Name)}_{promptIdx}"
+                    promptIdx += 1
+                    Dim pfg = If(pr.Color IsNot Nothing, pr.Color.Fg, scr.DefaultColor.Fg)
+                    Dim pbg = If(pr.Color IsNot Nothing, pr.Color.Bg, scr.DefaultColor.Bg)
+                    sb.AppendLine($"            ' Standalone Prompt: {EscapeString(pr.Text)}")
+                    sb.AppendLine($"            Dim {pVar} As New Label()")
+                    sb.AppendLine($"            {pVar}.Text  = ""{EscapeString(pr.Text)}""")
+                    sb.AppendLine($"            {pVar}.X     = TPos.Absolute({pr.Col - 1})")
+                    sb.AppendLine($"            {pVar}.Y     = TPos.Absolute({pr.Row})")
+                    sb.AppendLine($"            {pVar}.Width = TDim.Absolute({pr.Text.Length})")
+                    If pr.Color IsNot Nothing Then
+                        sb.AppendLine($"            {pVar}.SetScheme(New Scheme With {{")
+                        sb.AppendLine($"                .Normal    = ColorHelper.MakeAttr(""{pfg}"", ""{pbg}""),")
+                        sb.AppendLine($"                .Focus     = ColorHelper.MakeAttr(""{pfg}"", ""{pbg}""),")
+                        sb.AppendLine($"                .Editable  = ColorHelper.MakeAttr(""{pfg}"", ""{pbg}""),")
+                        sb.AppendLine($"                .HotNormal = ColorHelper.MakeAttr(""{pfg}"", ""{pbg}""),")
+                        sb.AppendLine($"                .HotFocus  = ColorHelper.MakeAttr(""{pfg}"", ""{pbg}"")")
+                        sb.AppendLine($"            }})")
+                    End If
+                    sb.AppendLine($"            Me.Add({pVar})")
+                Next
+
                 For Each sfld In scr.Fields
                     Dim vn = fieldVars(varIdx)
                     varIdx += 1
@@ -312,19 +358,36 @@ Imports System.Collections.Generic
                     Dim ffg = If(sfld.FocusColor IsNot Nothing, sfld.FocusColor.Fg, "Black")
                     Dim fbg = If(sfld.FocusColor IsNot Nothing, sfld.FocusColor.Bg, "Cyan")
 
-                    sb.AppendLine($"            ' Field: {sfld.Label}")
-                    Dim lbl_x = sfld.Col - 1
-                    Dim lbl_y = sfld.Row
-                    Dim tf_x  = sfld.Col - 1 + sfld.Label.Length + 2
-                    sb.AppendLine($"            Dim lbl_{vn.TrimStart("_"c)} As New Label()")
-                    sb.AppendLine($"            lbl_{vn.TrimStart("_"c)}.Text  = ""{EscapeString(sfld.Label)}:""")
-                    sb.AppendLine($"            lbl_{vn.TrimStart("_"c)}.X     = TPos.Absolute({lbl_x})")
-                    sb.AppendLine($"            lbl_{vn.TrimStart("_"c)}.Y     = TPos.Absolute({lbl_y})")
-                    sb.AppendLine($"            lbl_{vn.TrimStart("_"c)}.Width = TDim.Absolute({sfld.Label.Length + 1})")
-                    sb.AppendLine($"            Me.Add(lbl_{vn.TrimStart("_"c)})")
+                    Dim fieldDescr = If(Not String.IsNullOrEmpty(sfld.Label), sfld.Label, $"{sfld.IntoRecord}.{sfld.IntoField}")
+                    sb.AppendLine($"            ' Field: {EscapeString(fieldDescr)}")
+
+                    Dim tf_x As Integer, tf_y As Integer
+                    If Not String.IsNullOrEmpty(sfld.Label) Then
+                        Dim pRow = If(sfld.PromptRow <> -1, sfld.PromptRow, sfld.Row)
+                        Dim pCol = If(sfld.PromptCol <> -1, sfld.PromptCol, sfld.Col)
+                        Dim lblVar = $"lbl_{vn.TrimStart("_"c)}"
+                        sb.AppendLine($"            Dim {lblVar} As New Label()")
+                        sb.AppendLine($"            {lblVar}.Text  = ""{EscapeString(sfld.Label)}:""")
+                        sb.AppendLine($"            {lblVar}.X     = TPos.Absolute({pCol - 1})")
+                        sb.AppendLine($"            {lblVar}.Y     = TPos.Absolute({pRow})")
+                        sb.AppendLine($"            {lblVar}.Width = TDim.Absolute({sfld.Label.Length + 1})")
+                        sb.AppendLine($"            Me.Add({lblVar})")
+
+                        If sfld.PromptRow <> -1 AndAlso sfld.PromptCol <> -1 Then
+                            tf_x = sfld.Col - 1
+                            tf_y = sfld.Row
+                        Else
+                            tf_x = sfld.Col - 1 + sfld.Label.Length + 2
+                            tf_y = sfld.Row
+                        End If
+                    Else
+                        tf_x = sfld.Col - 1
+                        tf_y = sfld.Row
+                    End If
+
                     sb.AppendLine($"            {vn} = New TextField()")
                     sb.AppendLine($"            {vn}.X     = TPos.Absolute({tf_x})")
-                    sb.AppendLine($"            {vn}.Y     = TPos.Absolute({lbl_y})")
+                    sb.AppendLine($"            {vn}.Y     = TPos.Absolute({tf_y})")
                     sb.AppendLine($"            {vn}.Width = TDim.Absolute({sfld.Len})")
                     sb.AppendLine($"            {vn}.SetScheme(New Scheme With {{")
                     sb.AppendLine($"                .Normal    = ColorHelper.MakeAttr(""{nfg}"", ""{nbg}""),")
@@ -349,6 +412,8 @@ Imports System.Collections.Generic
                         sb.AppendLine($"            AddHandler {vn}.TextChanged, Sub(sender As Object, ev As EventArgs)")
                         sb.AppendLine($"                Dim fld = DirectCast(sender, TextField)")
                         sb.AppendLine($"                If fld.HasFocus AndAlso fld.Text IsNot Nothing AndAlso fld.Text.Length = {sfld.Len} Then")
+                        sb.AppendLine($"                    fld.InsertionPoint = 0")
+                        sb.AppendLine($"                    fld.InsertionPoint = {sfld.Len - 1}")
                         sb.AppendLine($"                    SaveRecord()")
                         sb.AppendLine($"                    ClearFields()")
                         sb.AppendLine($"                End If")
@@ -365,13 +430,14 @@ Imports System.Collections.Generic
                         sb.AppendLine($"            AddHandler {vn}.TextChanged, Sub(sender As Object, ev As EventArgs)")
                         sb.AppendLine($"                Dim fld = DirectCast(sender, TextField)")
                         sb.AppendLine($"                If fld.HasFocus AndAlso fld.Text IsNot Nothing AndAlso fld.Text.Length = {sfld.Len} Then")
-                        sb.AppendLine($"                    fld.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop)")
+                        sb.AppendLine($"                    fld.InsertionPoint = 0")
+                        sb.AppendLine($"                    fld.SuperView?.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop)")
                         sb.AppendLine($"                End If")
                         sb.AppendLine($"            End Sub")
                         sb.AppendLine($"            AddHandler {vn}.KeyDown, Sub(sender As Object, ev As Key)")
                         sb.AppendLine($"                If ev = Key.Enter Then")
                         sb.AppendLine($"                    Dim fld = DirectCast(sender, TextField)")
-                        sb.AppendLine($"                    fld.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop)")
+                        sb.AppendLine($"                    fld.SuperView?.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop)")
                         sb.AppendLine($"                    ev.Handled = True")
                         sb.AppendLine($"                End If")
                         sb.AppendLine($"            End Sub")
@@ -409,13 +475,19 @@ Imports System.Collections.Generic
                     sb.AppendLine($"            rec.Append(FormatHelper.ApplyMask(If({vn}.Text, """"), ""{EscapeString(fmt)}"", {sfld.Len}, {isNum.ToString().ToLower()}))")
                 Next
             Next
-            sb.AppendLine("            DataFile.WriteRecord(rec.ToString())")
+            sb.AppendLine("            DataFile.SaveRecordAtIndex(_recordIndex, rec.ToString())")
             sb.AppendLine("            _recordIndex = -1   ' reset to new record after save")
             sb.AppendLine("        End Sub")
             sb.AppendLine()
 
             ' Key handler — using correct Terminal.Gui v2 Key API
             sb.AppendLine("        Private Shadows Sub OnKeyDown(sender As Object, e As Key)")
+            sb.AppendLine("            ' F1 = Help screen")
+            sb.AppendLine("            If e = Key.F1 Then")
+            sb.AppendLine("                ShowHelp()")
+            sb.AppendLine("                e.Handled = True")
+            sb.AppendLine("                Return")
+            sb.AppendLine("            End If")
             sb.AppendLine("            ' F3 = Cancel (clear fields)")
             sb.AppendLine("            If e = Key.F3 Then")
             sb.AppendLine("                ClearFields()")
@@ -443,6 +515,21 @@ Imports System.Collections.Generic
             sb.AppendLine("                If base_ = Key.Home     Then NavigateRecord(0) : e.Handled = True")
             sb.AppendLine("                If base_ = Key.End      Then NavigateRecord(_records.Count - 1) : e.Handled = True")
             sb.AppendLine("            End If")
+            sb.AppendLine("        End Sub")
+            sb.AppendLine()
+            sb.AppendLine("        Private Sub ShowHelp()")
+            sb.AppendLine("            Dim helpMsg = ""Keyboard Shortcuts & Commands:"" & vbCrLf & vbCrLf & _")
+            sb.AppendLine("                          ""  Enter / Tab      - Move to next field"" & vbCrLf & _")
+            sb.AppendLine("                          ""  Shift+Tab        - Move to previous field"" & vbCrLf & _")
+            sb.AppendLine("                          ""  Ctrl+S           - Save record"" & vbCrLf & _")
+            sb.AppendLine("                          ""  F1               - Show this Help screen"" & vbCrLf & _")
+            sb.AppendLine("                          ""  F3               - Cancel / Clear fields"" & vbCrLf & _")
+            sb.AppendLine("                          ""  F10              - Quit application"" & vbCrLf & _")
+            sb.AppendLine("                          ""  Shift + PageUp   - Go to previous record"" & vbCrLf & _")
+            sb.AppendLine("                          ""  Shift + PageDown - Go to next record"" & vbCrLf & _")
+            sb.AppendLine("                          ""  Shift + Home     - Go to first record"" & vbCrLf & _")
+            sb.AppendLine("                          ""  Shift + End      - Go to last record""")
+            sb.AppendLine("            MessageBox.Query(_app, ""Help — Commands & Hotkeys"", helpMsg, ""OK"")")
             sb.AppendLine("        End Sub")
             sb.AppendLine()
 

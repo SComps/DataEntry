@@ -73,11 +73,22 @@ Imports System.Collections.Generic
 
     ' ── Screen Section ───────────────────────────────────────────────────────
 
+    ''' <summary>A standalone PROMPT or LABEL text element on a screen.</summary>
+    Public Class ScreenPrompt
+        Public Property Text As String = ""
+        Public Property Row As Integer = 1
+        Public Property Col As Integer = 1
+        Public Property Color As ColorSpec = Nothing
+        Public Property Line As Integer
+    End Class
+
     ''' <summary>One FIELD entry inside a SCREEN definition.</summary>
     Public Class ScreenField
         Public Property Label As String = ""
         Public Property Row As Integer = 1
         Public Property Col As Integer = 1
+        Public Property PromptRow As Integer = -1  ' -1 = implicit offset position
+        Public Property PromptCol As Integer = -1  ' -1 = implicit offset position
         Public Property Len As Integer = 0
         Public Property IntoRecord As String = ""   ' record name from INTO RECORD.FIELD
         Public Property IntoField As String = ""    ' field name from INTO RECORD.FIELD
@@ -88,10 +99,11 @@ Imports System.Collections.Generic
         Public Property Line As Integer
     End Class
 
-    ''' <summary>A SCREEN block with its list of fields.</summary>
+    ''' <summary>A SCREEN block with its prompts and fields.</summary>
     Public Class ScreenSection
         Public Property Name As String = ""
         Public Property DefaultColor As ColorSpec = New ColorSpec()
+        Public Property Prompts As New List(Of ScreenPrompt)
         Public Property Fields As New List(Of ScreenField)
         Public Property Line As Integer
     End Class

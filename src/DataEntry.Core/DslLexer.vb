@@ -32,7 +32,9 @@ Imports System.Collections.Generic
             "DATA-SECTION", "SCREEN-SECTION", "RECORD", "FIELD", "FILE",
             "APPEND", "NOAPPEND", "LRECL", "LEND", "CRLF", "LF", "CR", "NONE",
             "FORMAT", "START", "LEN", "ROW", "COL", "INTO", "VALIDATE", "WITH",
-            "SCREEN", "COLOR", "FG", "BG", "NORMAL", "FOCUS", "ERROR"
+            "SCREEN", "COLOR", "FG", "BG", "NORMAL", "FOCUS", "ERROR",
+            "PROMPT", "LABEL", "PROMPT_ROW", "PROMPT_COL", "LABEL_ROW", "LABEL_COL",
+            "FIELD_ROW", "FIELD_COL"
         }
 
         Private ReadOnly _src As String

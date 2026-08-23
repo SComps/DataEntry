@@ -668,6 +668,36 @@ Namespace DataEntry.Tests
                 If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
             End Try
         End Sub
+
+        <Fact>
+        Public Sub CodeGen_GeneratesSuperViewAdvanceFocusAndInsertionPointReset()
+            Dim dsl = "DATA-SECTION" & vbCrLf &
+                      "    FILE out.dat APPEND LRECL=20 LEND=CRLF" & vbCrLf &
+                      "RECORD R" & vbCrLf &
+                      "    F1 LEN=10" & vbCrLf &
+                      "    FORMAT=XXXXXXXXXX." & vbCrLf &
+                      "    F2 LEN=10" & vbCrLf &
+                      "    FORMAT=XXXXXXXXXX." & vbCrLf &
+                      "SCREEN-SECTION" & vbCrLf &
+                      "SCREEN S" & vbCrLf &
+                      "    FIELD ""F1"" ROW=1 COL=1 LEN=10 INTO R.F1" & vbCrLf &
+                      "    FIELD ""F2"" ROW=2 COL=1 LEN=10 INTO R.F2"
+            Dim result = ParseDsl(dsl)
+            Dim outDir = Path.Combine(Path.GetTempPath(), $"cg_advf_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim mfContent = File.ReadAllText(Path.Combine(outDir, "MainForm.vb"))
+
+                Assert.Contains("fld.InsertionPoint = 0", mfContent)
+                Assert.Contains("fld.SuperView?.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop)", mfContent)
+                Assert.Contains("DataFile.SaveRecordAtIndex(_recordIndex, rec.ToString())", mfContent)
+                Assert.Contains("If e = Key.F1 Then", mfContent)
+                Assert.Contains("ShowHelp()", mfContent)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
     End Class
 
     ' ─────────────────────────────────────────────────────────────────────────
@@ -732,6 +762,87 @@ Namespace DataEntry.Tests
             Assert.Equal("", tf1.Text)
             Assert.Equal("", tf2.Text)
             Assert.True(tf1.HasFocus)
+        End Sub
+
+    End Class
+
+    ' ─────────────────────────────────────────────────────────────────────────
+    ' ScreenElementTests — standalone prompts, independent coordinates & validation
+    ' ─────────────────────────────────────────────────────────────────────────
+    Public Class ScreenElementTests
+
+        <Fact>
+        Public Sub StandalonePrompt_ParsesCorrectly()
+            Dim dsl = "DATA-SECTION" & vbCrLf &
+                      "    FILE out.dat APPEND LRECL=10 LEND=CRLF" & vbCrLf &
+                      "RECORD R" & vbCrLf &
+                      "    F1 LEN=10" & vbCrLf &
+                      "    FORMAT=XXXXXXXXXX." & vbCrLf &
+                      "SCREEN-SECTION" & vbCrLf &
+                      "SCREEN S" & vbCrLf &
+                      "    PROMPT ""Enter Name:"" ROW=2 COL=2" & vbCrLf &
+                      "    FIELD ROW=2 COL=20 LEN=10 INTO R.F1"
+            Dim res = ParseAndValidate(dsl)
+            Assert.Empty(res.ParseErrs)
+            Assert.Empty(HardErrors(res.ValidErrs))
+            Assert.Single(res.Doc.Screens(0).Prompts)
+            Assert.Equal("Enter Name:", res.Doc.Screens(0).Prompts(0).Text)
+            Assert.Equal(2, res.Doc.Screens(0).Prompts(0).Row)
+            Assert.Equal(2, res.Doc.Screens(0).Prompts(0).Col)
+        End Sub
+
+        <Fact>
+        Public Sub Field_ExplicitPromptRowCol_ParsesCorrectly()
+            Dim dsl = "DATA-SECTION" & vbCrLf &
+                      "    FILE out.dat APPEND LRECL=10 LEND=CRLF" & vbCrLf &
+                      "RECORD R" & vbCrLf &
+                      "    F1 LEN=10" & vbCrLf &
+                      "    FORMAT=XXXXXXXXXX." & vbCrLf &
+                      "SCREEN-SECTION" & vbCrLf &
+                      "SCREEN S" & vbCrLf &
+                      "    FIELD ""Name"" PROMPT_ROW=2 PROMPT_COL=2 ROW=2 COL=20 LEN=10 INTO R.F1"
+            Dim res = ParseAndValidate(dsl)
+            Assert.Empty(res.ParseErrs)
+            Assert.Empty(HardErrors(res.ValidErrs))
+            Dim fld = res.Doc.Screens(0).Fields(0)
+            Assert.Equal("Name", fld.Label)
+            Assert.Equal(2, fld.PromptRow)
+            Assert.Equal(2, fld.PromptCol)
+            Assert.Equal(2, fld.Row)
+            Assert.Equal(20, fld.Col)
+        End Sub
+
+        <Fact>
+        Public Sub Validator_DetectsOverlapError()
+            Dim dsl = "DATA-SECTION" & vbCrLf &
+                      "    FILE out.dat APPEND LRECL=30 LEND=CRLF" & vbCrLf &
+                      "RECORD R" & vbCrLf &
+                      "    F1 LEN=20" & vbCrLf &
+                      "    FORMAT=XXXXXXXXXXXXXXXXXXXX." & vbCrLf &
+                      "SCREEN-SECTION" & vbCrLf &
+                      "SCREEN S" & vbCrLf &
+                      "    PROMPT ""Very Long Label Text"" ROW=2 COL=2" & vbCrLf &
+                      "    FIELD ROW=2 COL=10 LEN=20 INTO R.F1"
+            Dim res = ParseAndValidate(dsl)
+            Dim errs = HardErrors(res.ValidErrs)
+            Assert.NotEmpty(errs)
+            Assert.Contains(errs, Function(e) e.Message.Contains("overlaps"))
+        End Sub
+
+        <Fact>
+        Public Sub Validator_DetectsScreenBoundaryError()
+            Dim dsl = "DATA-SECTION" & vbCrLf &
+                      "    FILE out.dat APPEND LRECL=30 LEND=CRLF" & vbCrLf &
+                      "RECORD R" & vbCrLf &
+                      "    F1 LEN=30" & vbCrLf &
+                      "    FORMAT=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX." & vbCrLf &
+                      "SCREEN-SECTION" & vbCrLf &
+                      "SCREEN S" & vbCrLf &
+                      "    FIELD ROW=2 COL=60 LEN=30 INTO R.F1"
+            Dim res = ParseAndValidate(dsl)
+            Dim errs = HardErrors(res.ValidErrs)
+            Assert.NotEmpty(errs)
+            Assert.Contains(errs, Function(e) e.Message.Contains("exceeds screen boundaries"))
         End Sub
 
     End Class

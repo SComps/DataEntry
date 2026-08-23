@@ -40,11 +40,12 @@ field positions, colours, and tab order.  No data is written to disk.
 | **Shift-Tab** | Move to previous field |
 | **Auto-Save on Last Field** | Completing or pressing Enter on the last field saves the record |
 | **Ctrl+S** | Save record manually at any time |
+| **F1** | Show Help dialog detailing commands & hotkeys |
 | **F3** | Cancel current entry (clears fields) |
 | **Page Up / Page Down** | Switch between screens in a multi-screen form |
-| **Shift-PgUp / Shift-PgDn** | Previous / next record (preview message) |
-| **Shift-Home / Shift-End** | First / last record (preview message) |
-| **F10** | Compile & Build the form |
+| **Shift-PgUp / Shift-PgDn** | Previous / next record navigation |
+| **Shift-Home / Shift-End** | First / last record navigation |
+| **F10** | Compile & Build the form (or quit compiled application) |
 | **F → File menu** | Open, Compile & Build, Quit |
 
 When the form has **errors** the compiler shows a scrollable list of every

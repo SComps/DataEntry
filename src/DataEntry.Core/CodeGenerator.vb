@@ -33,11 +33,10 @@ Imports System.Collections.Generic
             sb.AppendLine("    <OutputType>Exe</OutputType>")
             sb.AppendLine($"    <RootNamespace>{name}</RootNamespace>")
             sb.AppendLine("    <TargetFramework>net10.0</TargetFramework>")
-            sb.AppendLine("    <PublishAot>true</PublishAot>")
+            sb.AppendLine("    <PublishSingleFile>true</PublishSingleFile>")
             sb.AppendLine("    <SelfContained>true</SelfContained>")
             sb.AppendLine("    <InvariantGlobalization>true</InvariantGlobalization>")
             sb.AppendLine("    <SuppressTrimAnalysisWarnings>true</SuppressTrimAnalysisWarnings>")
-            sb.AppendLine("    <StripSymbols>true</StripSymbols>")
             sb.AppendLine("  </PropertyGroup>")
             sb.AppendLine("  <ItemGroup>")
             sb.AppendLine("    <PackageReference Include=""Terminal.Gui"" Version=""2.4.17"" />")
@@ -45,6 +44,7 @@ Imports System.Collections.Generic
             sb.AppendLine("</Project>")
             Write(dir, $"{name}.vbproj", sb)
         End Sub
+
 
         ' ── Program.vb ───────────────────────────────────────────────────────
 

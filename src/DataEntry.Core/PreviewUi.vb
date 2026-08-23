@@ -201,12 +201,15 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
 
             Dim result = BuildRunner.Build(_outputDir, stream:=False)
 
-            Dim status = If(result.Success,
-                "AOT Publish succeeded.",
-                "AOT Publish FAILED — see output below.")
+            Dim msg As String
+            If result.Success Then
+                msg = $"Publish succeeded.{Environment.NewLine}{Environment.NewLine}" &
+                      $"Self-contained EXE written to:{Environment.NewLine}{result.PublishDir}"
+            Else
+                msg = $"Publish FAILED — see output below.{Environment.NewLine}{Environment.NewLine}{result.Output}"
+            End If
 
-            MessageBox.Query(_app, "Publish Result",
-                status & Environment.NewLine & Environment.NewLine & result.Output, "Close")
+            MessageBox.Query(_app, "Publish Result", msg, "Close")
         End Sub
 
     End Class

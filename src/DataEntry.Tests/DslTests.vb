@@ -216,7 +216,7 @@ Namespace DataEntry.Tests
                 Dim projFiles = Directory.GetFiles(outDir, "*.vbproj")
                 Assert.Single(projFiles)
                 Dim projContent = File.ReadAllText(projFiles(0))
-                Assert.Contains("<PublishAot>true</PublishAot>", projContent)
+                Assert.Contains("<PublishSingleFile>true</PublishSingleFile>", projContent)
                 Assert.Contains("<SelfContained>true</SelfContained>", projContent)
             Finally
                 If Directory.Exists(outDir) Then Directory.Delete(outDir, True)

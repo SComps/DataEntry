@@ -1,6 +1,7 @@
-' BuildRunner — shells out to "dotnet publish" (AOT self-contained) and captures output.
+' BuildRunner — shells out to "dotnet publish" (self-contained single-file) and captures output.
 ' Works on Windows, Linux, and macOS by calling dotnet directly (no shell wrapper).
 Imports System.Diagnostics
+Imports System.IO
 Imports System.Runtime.InteropServices
 Imports System.Text
 
@@ -8,13 +9,14 @@ Imports System.Text
     Public Class BuildResult
         Public Property Success As Boolean
         Public Property Output As String = ""
+        Public Property PublishDir As String = ""  ' where the EXE was written
     End Class
 
     Public Class BuildRunner
 
         ''' <summary>
         ''' Determine the dotnet runtime identifier (RID) for the current OS and architecture.
-        ''' A RID is required for self-contained / AOT publish to produce a native EXE.
+        ''' A RID is required for self-contained publish to produce a native EXE.
         ''' </summary>
         Private Shared Function CurrentRid() As String
             Dim arch = RuntimeInformation.ProcessArchitecture
@@ -30,18 +32,21 @@ Imports System.Text
         End Function
 
         ''' <summary>
-        ''' Run "dotnet publish" (Release, AOT, self-contained) on the project in outputDir.
+        ''' Run "dotnet publish" (self-contained single-file EXE) on the project in projectDir.
+        ''' The finished EXE is written to projectDir\publish\.
         ''' stream = True  → write each line to Console.Out in real time (--build mode).
         ''' stream = False → collect all output and return it in BuildResult.Output.
         ''' </summary>
-        Public Shared Function Build(outputDir As String,
+        Public Shared Function Build(projectDir As String,
                                      Optional stream As Boolean = False) As BuildResult
 
-            Dim rid = CurrentRid()
-            Dim sb As New StringBuilder
+            Dim rid        = CurrentRid()
+            Dim publishDir = Path.Combine(projectDir, "publish")
+            Dim sb         As New StringBuilder
+
             Dim psi As New ProcessStartInfo With {
                 .FileName               = "dotnet",
-                .Arguments              = $"publish ""{outputDir}"" --configuration Release --runtime {rid} --self-contained true -p:PublishAot=true -p:StripSymbols=true",
+                .Arguments              = $"publish ""{projectDir}"" --configuration Release --runtime {rid} --self-contained true -p:PublishSingleFile=true --output ""{publishDir}""",
                 .RedirectStandardOutput = True,
                 .RedirectStandardError  = True,
                 .UseShellExecute        = False,
@@ -74,8 +79,9 @@ Imports System.Text
                 proc.WaitForExit()
 
                 Return New BuildResult With {
-                    .Success = (proc.ExitCode = 0),
-                    .Output  = sb.ToString()
+                    .Success    = (proc.ExitCode = 0),
+                    .Output     = sb.ToString(),
+                    .PublishDir = publishDir
                 }
             End Using
         End Function

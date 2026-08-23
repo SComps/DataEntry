@@ -38,7 +38,7 @@ field positions, colours, and tab order.  No data is written to disk.
 |-----|--------|
 | **Tab / Shift-Tab** | Move between fields |
 | **F3** | Cancel (preview message) |
-| **Right Ctrl** | Save record (preview message) |
+| **Right Ctrl** / **Ctrl+S** | Save record (preview message) |
 | **Page Up / Page Down** | Switch between screens in a multi-screen form |
 | **Shift-PgUp / Shift-PgDn** | Previous / next record (preview message) |
 | **Shift-Home / Shift-End** | First / last record (preview message) |
@@ -241,7 +241,7 @@ They cannot be overridden in the DSL.
 | **Backspace** | Delete character to the left |
 | **Delete** | Delete character under cursor |
 | **F3** | Clear all fields (cancel current entry) |
-| **Right Ctrl** | Save the record and clear fields for next entry |
+| **Right Ctrl** / **Ctrl+S** | Save the record and clear fields for next entry |
 | **F10** | Quit the application |
 | **Page Up / Page Down** | Navigate between screens (multi-screen forms) |
 | **Shift-PgUp** | Load previous record for editing |

@@ -137,8 +137,8 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
                 Return
             End If
 
-            ' Right Control = "Save" preview message
-            If e.IsCtrl AndAlso e.NoCtrl = Key.R Then
+            ' Right Ctrl (alone) or Ctrl+S = Save (preview only — no file is written)
+            If e.IsCtrl AndAlso (e.NoCtrl = Key.Empty OrElse e.NoCtrl = Key.S) Then
                 MessageBox.Query(_app, "Save",
                     "Record saved. (preview only — no file was written)", "OK")
                 Return

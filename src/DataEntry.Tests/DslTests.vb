@@ -164,7 +164,7 @@ Namespace DataEntry.Tests
         <Fact>
         Public Sub Parse_ScreenField_IntoMapping()
             Dim result = ParseDsl(_src)
-            Dim fld = result.Doc.Screens(0).Fields.Find(Function(f) f.Label = "Last Name")
+            Dim fld = result.Doc.Screens(0).Fields.Find(Function(f) f.IntoField = "LNAME")
             Assert.NotNull(fld)
             Assert.Equal("CUSTOMER", fld.IntoRecord)
             Assert.Equal("LNAME", fld.IntoField)
@@ -173,7 +173,7 @@ Namespace DataEntry.Tests
         <Fact>
         Public Sub Parse_ScreenField_WithExplicitColors()
             Dim result = ParseDsl(_src)
-            Dim fld = result.Doc.Screens(0).Fields.Find(Function(f) f.Label = "Customer ID")
+            Dim fld = result.Doc.Screens(0).Fields.Find(Function(f) f.IntoField = "CUSTID")
             Assert.NotNull(fld)
             Assert.NotNull(fld.NormalColor)
             Assert.Equal("White", fld.NormalColor.Fg)
@@ -281,10 +281,10 @@ Namespace DataEntry.Tests
         Public Sub Parse_Screen_ValidateWithFunctions()
             Dim result = ParseDsl(_src)
             Dim scr = Assert.Single(result.Doc.Screens)
-            Dim skuFld = scr.Fields.Find(Function(f) f.Label = "SKU")
+            Dim skuFld = scr.Fields.Find(Function(f) f.IntoField = "SKU")
             Assert.NotNull(skuFld)
             Assert.Equal("CHECKSKU", skuFld.ValidateFunc)
-            Dim qtyFld = scr.Fields.Find(Function(f) f.Label = "Qty On Hand")
+            Dim qtyFld = scr.Fields.Find(Function(f) f.IntoField = "QTY")
             Assert.NotNull(qtyFld)
             Assert.Equal("CHECKQTY", qtyFld.ValidateFunc)
         End Sub

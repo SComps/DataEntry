@@ -180,12 +180,21 @@ Imports System.Collections.Generic
             sb.AppendLine()
             sb.AppendLine("        ' Apply a FORMAT mask to a raw input string.")
             sb.AppendLine("        ' Returns the formatted string padded/trimmed to fieldLen.")
+            sb.AppendLine("        ' Mask escape: \x means x is a literal character (e.g. \- inserts a literal dash).")
             sb.AppendLine("        Public Function ApplyMask(raw As String, mask As String,")
             sb.AppendLine("                                  fieldLen As Integer,")
             sb.AppendLine("                                  isNumeric As Boolean) As String")
             sb.AppendLine("            Dim sb As New StringBuilder")
             sb.AppendLine("            Dim ri = 0  ' index into raw input")
-            sb.AppendLine("            For Each mc In mask")
+            sb.AppendLine("            Dim mi = 0  ' index into mask")
+            sb.AppendLine("            Do While mi < mask.Length")
+            sb.AppendLine("                Dim mc = mask(mi)")
+            sb.AppendLine("                ' \x — escaped literal: write x as-is, do not consume raw input")
+            sb.AppendLine("                If mc = ""\""c AndAlso mi + 1 < mask.Length Then")
+            sb.AppendLine("                    sb.Append(mask(mi + 1))")
+            sb.AppendLine("                    mi += 2")
+            sb.AppendLine("                    Continue Do")
+            sb.AppendLine("                End If")
             sb.AppendLine("                Select Case mc")
             sb.AppendLine("                    Case ""X""c  ' alphanumeric — take as-is")
             sb.AppendLine("                        sb.Append(If(ri < raw.Length, raw(ri), "" ""c))")
@@ -204,10 +213,11 @@ Imports System.Collections.Generic
             sb.AppendLine("                        Dim dc = If(ri < raw.Length, raw(ri), ""0""c)")
             sb.AppendLine("                        sb.Append(If(Char.IsDigit(dc), dc, ""0""c))")
             sb.AppendLine("                        ri += 1")
-            sb.AppendLine("                    Case Else   ' literal character")
+            sb.AppendLine("                    Case Else   ' unescaped literal character")
             sb.AppendLine("                        sb.Append(mc)")
             sb.AppendLine("                End Select")
-            sb.AppendLine("            Next")
+            sb.AppendLine("                mi += 1")
+            sb.AppendLine("            Loop")
             sb.AppendLine("            Dim result = sb.ToString()")
             sb.AppendLine("            ' Adjust to fieldLen: numbers right-adjust, text left-adjust")
             sb.AppendLine("            If result.Length < fieldLen Then")
@@ -218,11 +228,17 @@ Imports System.Collections.Generic
             sb.AppendLine("            Return result")
             sb.AppendLine("        End Function")
             sb.AppendLine()
-            sb.AppendLine("        ' Returns True if a mask is purely numeric (9 and Z characters only).")
+            sb.AppendLine("        ' Returns True if a mask contains only numeric placeholders (9, Z) and escaped literals.")
             sb.AppendLine("        Public Function IsNumericMask(mask As String) As Boolean")
-            sb.AppendLine("            For Each c In mask")
-            sb.AppendLine("                If c <> ""9""c AndAlso c <> ""Z""c Then Return False")
-            sb.AppendLine("            Next")
+            sb.AppendLine("            Dim i = 0")
+            sb.AppendLine("            Do While i < mask.Length")
+            sb.AppendLine("                If mask(i) = ""\""c AndAlso i + 1 < mask.Length Then")
+            sb.AppendLine("                    i += 2  ' skip escaped literal — it does not affect numeric classification")
+            sb.AppendLine("                    Continue Do")
+            sb.AppendLine("                End If")
+            sb.AppendLine("                If mask(i) <> ""9""c AndAlso mask(i) <> ""Z""c Then Return False")
+            sb.AppendLine("                i += 1")
+            sb.AppendLine("            Loop")
             sb.AppendLine("            Return mask.Length > 0")
             sb.AppendLine("        End Function")
             sb.AppendLine()
@@ -491,7 +507,19 @@ Imports System.Collections.Generic
                             Next
                         End If
                     Next
-                    Dim isNum = fmt.Replace("9", "").Replace("Z", "").Trim().Length = 0 AndAlso fmt.Length > 0
+                    ' Escape-aware numeric check: a mask is numeric if every non-escaped character is 9 or Z.
+                    Dim isNum As Boolean = fmt.Length > 0
+                    Dim ci = 0
+                    Do While ci < fmt.Length
+                        If fmt(ci) = "\"c AndAlso ci + 1 < fmt.Length Then
+                            ci += 2  ' skip escaped literal — doesn't affect numeric classification
+                        ElseIf fmt(ci) <> "9"c AndAlso fmt(ci) <> "Z"c Then
+                            isNum = False
+                            Exit Do
+                        Else
+                            ci += 1
+                        End If
+                    Loop
                     sb.AppendLine($"            ' {sfld.Label} → {sfld.IntoRecord}.{sfld.IntoField}")
                     sb.AppendLine($"            rec.Append(FormatHelper.ApplyMask(If({vn}.Text, """"), ""{EscapeString(fmt)}"", {sfld.Len}, {isNum.ToString().ToLower()}))")
                 Next

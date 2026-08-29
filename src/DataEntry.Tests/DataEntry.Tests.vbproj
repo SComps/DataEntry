@@ -20,6 +20,7 @@
   <!-- Sample .def files copied to the build output directory so tests read from disk. -->
   <ItemGroup>
     <None Include="Samples\*.def" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\sample.def" CopyToOutputDirectory="PreserveNewest" Link="Samples\sample.def" />
   </ItemGroup>
 
 </Project>

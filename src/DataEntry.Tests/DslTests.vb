@@ -516,17 +516,176 @@ Namespace DataEntry.Tests
         End Sub
 
         <Theory>
-        <InlineData("999",  True)>    ' pure digit
-        <InlineData("ZZZ",  True)>    ' pure zero-fill
-        <InlineData("9Z9",  True)>    ' mixed numeric
-        <InlineData("XXX",  False)>   ' alphanumeric — not numeric
-        <InlineData("UU",   False)>   ' uppercase — not numeric
-        <InlineData("",     False)>   ' empty
+        <InlineData("999",      True)>    ' pure digit
+        <InlineData("ZZZ",      True)>    ' pure zero-fill
+        <InlineData("9Z9",      True)>    ' mixed numeric
+        <InlineData("999\-9999",True)>    ' digits + escaped literal — still numeric
+        <InlineData("ZZ\.99",   True)>    ' zero-fill + escaped dot — still numeric
+        <InlineData("XXX",      False)>   ' alphanumeric — not numeric
+        <InlineData("UU",       False)>   ' uppercase — not numeric
+        <InlineData("",         False)>   ' empty
         Public Sub IsNumericMask_ReturnsExpected(mask As String, expected As Boolean)
-            ' Test the numeric-detection logic used for right/left adjustment.
-            ' We test it directly via a helper that replicates what CodeGenerator does.
-            Dim isNum = mask.Replace("9", "").Replace("Z", "").Trim().Length = 0 AndAlso mask.Length > 0
-            Assert.Equal(expected, isNum)
+            Dim tokens = DslParser.ParseFormatMask(mask)
+            Assert.Equal(expected, FormatMask.IsNumericMask(tokens))
+        End Sub
+
+    End Class
+
+    ' ─────────────────────────────────────────────────────────────────────────
+    ' ApplyMaskTests — verify that FormatMask.ApplyMask produces the correct
+    ' fixed-length record field value for a given raw input and FORMAT mask.
+    ' These tests directly exercise the same logic that ends up in the
+    ' generated FormatHelper.vb of every compiled form.
+    ' ─────────────────────────────────────────────────────────────────────────
+    Public Class ApplyMaskTests
+
+        ''' <summary>Helper: parse mask raw string then apply it.</summary>
+        Private Shared Function Apply(raw As String, maskRaw As String, fieldLen As Integer) As String
+            Dim tokens = DslParser.ParseFormatMask(maskRaw)
+            Return FormatMask.ApplyMask(raw, tokens, fieldLen)
+        End Function
+
+        ' ── Escaped-literal masks (the bug that was reported) ─────────────────
+
+        <Fact>
+        Public Sub Phone_EscapedHyphens_InsertsHyphens()
+            ' FORMAT=999\-999\-9999.  LEN=12
+            ' Input: 3156176379 → expected: 315-617-6379
+            Assert.Equal("315-617-6379", Apply("3156176379", "999\-999\-9999", 12))
+        End Sub
+
+        <Fact>
+        Public Sub Phone_ShortInput_SpacePadsLeft()
+            ' Numeric mask with escaped literals — right-justified (numeric padding)
+            ' Input: 617 (only 3 digits) → 3 digits filled, rest space-padded then left-padded
+            Dim result = Apply("617", "999\-999\-9999", 12)
+            Assert.Equal(12, result.Length)
+            ' The three digits land at positions 0-2; check digit at index 2 is '7'
+            Assert.Equal("7"c, result(2))
+        End Sub
+
+        <Fact>
+        Public Sub Date_EscapedSlashes_InsertsSlashes()
+            ' FORMAT=99\/99\/9999.  LEN=10
+            ' Input: 12252025 → expected: 12/25/2025
+            Assert.Equal("12/25/2025", Apply("12252025", "99\/99\/9999", 10))
+        End Sub
+
+        ' ── Plain digit / zero-fill masks ─────────────────────────────────────
+
+        <Fact>
+        Public Sub Digits_ExactLength_NoChange()
+            ' FORMAT=999999.  LEN=6
+            Assert.Equal("123456", Apply("123456", "999999", 6))
+        End Sub
+
+        <Fact>
+        Public Sub Digits_Short_SpacePadsWithSpaces()
+            ' 9 placeholder: missing input char → space; result left-justified because
+            ' trailing spaces make it look non-numeric for padding — but length already = LEN
+            Assert.Equal("42   ", Apply("42", "99999", 5))
+        End Sub
+
+        <Fact>
+        Public Sub ZeroFill_ShortInput_ZeroFillsMissingPositions()
+            ' Z placeholder: missing input char → '0'; result length = LEN, no pad step fires
+            Assert.Equal("700", Apply("7", "ZZZ", 3))
+        End Sub
+
+        <Fact>
+        Public Sub ZeroFill_NonDigit_WritesZero()
+            ' Z placeholder: non-digit input char → '0'
+            Assert.Equal("000", Apply("A B", "ZZZ", 3))
+        End Sub
+
+        <Fact>
+        Public Sub ZeroFill_WithDecimalLiteral_CorrectOutput()
+            ' FORMAT=ZZ.99.  LEN=5  (hours.minutes, e.g. 08.50)
+            ' Input: "850" → Z='8', Z='5', .='.', 9=raw(2)='0', 9=missing→' ' → "85.0 "
+            Assert.Equal("85.0 ", Apply("850", "ZZ.99", 5))
+        End Sub
+
+        <Fact>
+        Public Sub ZeroFill_WithDecimalLiteral_FourDigits_CorrectOutput()
+            ' Input: 0850 → Z='0', Z='8', .='.', 9='5', 9='0' → "08.50"
+            Assert.Equal("08.50", Apply("0850", "ZZ.99", 5))
+        End Sub
+
+        ' ── Alpha masks ───────────────────────────────────────────────────────
+
+        <Fact>
+        Public Sub Alpha_X_CopiesAsIs()
+            Assert.Equal("Hello", Apply("Hello", "XXXXX", 5))
+        End Sub
+
+        <Fact>
+        Public Sub Alpha_U_ForcesUpperCase()
+            Assert.Equal("HELLO", Apply("hello", "UUUUU", 5))
+        End Sub
+
+        <Fact>
+        Public Sub Alpha_L_ForcesLowerCase()
+            Assert.Equal("hello", Apply("HELLO", "LLLLL", 5))
+        End Sub
+
+        <Fact>
+        Public Sub Alpha_Short_SpacePadsRight()
+            ' Non-numeric mask, input shorter than LEN → left-justified (space right-padded)
+            Assert.Equal("AB   ", Apply("AB", "XXXXX", 5))
+        End Sub
+
+        <Fact>
+        Public Sub Alpha_Long_Truncates()
+            Assert.Equal("Hello", Apply("HelloWorld", "XXXXX", 5))
+        End Sub
+
+        ' ── Digit validation ──────────────────────────────────────────────────
+
+        <Fact>
+        Public Sub Digit_NonDigitInput_WritesSpace()
+            ' 9 placeholder: non-digit → space
+            Assert.Equal("1 3", Apply("1A3", "999", 3))
+        End Sub
+
+        ' ── Field value round-trip through DSL pipeline ───────────────────────
+
+        <Fact>
+        Public Sub SampleDef_PhoneField_RoundTrip()
+            ' Verify the full pipeline: parse sample.def (in Samples/), find CPHONE field,
+            ' apply its mask to the digits that were typed, assert correct record bytes.
+            Dim src = LoadSample("sample.def")   ' copied from repo root via .vbproj
+            Dim result = ParseDsl(src)
+            Dim phoneField = result.Doc.Data.Records(0).Fields.Find(Function(f) f.Name = "CPHONE")
+            Assert.NotNull(phoneField)
+            Assert.Equal(12, phoneField.Len)
+
+            Dim output = FormatMask.ApplyMask("3156176379", phoneField.Format.Tokens, phoneField.Len)
+            Assert.Equal("315-617-6379", output)
+        End Sub
+
+        <Fact>
+        Public Sub CustomerDef_PhoneField_RoundTrip()
+            Dim src = LoadSample("customer.def")
+            Dim result = ParseDsl(src)
+            Dim phoneField = result.Doc.Data.Records(0).Fields.Find(Function(f) f.Name = "PHONE")
+            Assert.NotNull(phoneField)
+            Assert.Equal(12, phoneField.Len)
+
+            Dim output = FormatMask.ApplyMask("3156176379", phoneField.Format.Tokens, phoneField.Len)
+            Assert.Equal("315-617-6379", output)
+        End Sub
+
+        <Fact>
+        Public Sub TimesheetDef_WeekendField_RoundTrip()
+            ' FORMAT=99\/99\/9999  LEN=10  — date with escaped slashes
+            Dim src = LoadSample("timesheet.def")
+            Dim result = ParseDsl(src)
+            Dim fld = result.Doc.Data.Records(0).Fields.Find(Function(f) f.Name = "WEEKEND")
+            Assert.NotNull(fld)
+            Assert.Equal(10, fld.Len)
+
+            Dim output = FormatMask.ApplyMask("12252025", fld.Format.Tokens, fld.Len)
+            Assert.Equal("12/25/2025", output)
         End Sub
 
     End Class

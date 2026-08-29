@@ -28,8 +28,20 @@ Imports System.Collections.Generic
         Public Function ApplyMask(raw As String,
                                   tokens As List(Of MaskToken),
                                   fieldLen As Integer) As String
+            ' No FORMAT mask — accept input verbatim, just pad/truncate to fieldLen.
+            If tokens.Count = 0 Then
+                If raw.Length < fieldLen Then Return raw.PadRight(fieldLen)
+                If raw.Length > fieldLen Then Return raw.Substring(0, fieldLen)
+                Return raw
+            End If
+
             Dim sb As New StringBuilder
             Dim ri = 0   ' index into raw input
+
+            ' Normalise pre-formatted input: strip separator/punctuation characters that
+            ' cannot be accepted by the mask's placeholder types.  This means both
+            ' "800-867-5309" and "(800)867-5309" collapse to raw digits before the mask runs.
+            raw = StripLiterals(raw, tokens)
 
             For Each tok In tokens
                 Select Case tok.Kind
@@ -96,6 +108,46 @@ Imports System.Collections.Generic
                     Case MaskToken.TokenKind.Literal
                         sb.Append(tok.LiteralChar)
                 End Select
+            Next
+            Return sb.ToString()
+        End Function
+
+        ''' <summary>
+        ''' Strips non-data characters from <paramref name="raw"/> based on what the mask's
+        ''' placeholder types can accept.  This normalises pre-formatted input — e.g. both
+        ''' "800-867-5309" and "(800)867-5309" collapse to "8008675309" for a digit-only mask,
+        ''' so they format identically to a user who typed raw digits.
+        ''' <para>
+        ''' Rules (first matching wins):
+        '''   X placeholder present  → keep only alphanumeric characters
+        '''   U/L placeholder present → keep only letter characters
+        '''   9/Z placeholders only  → keep only digit characters
+        '''   No data placeholders   → return raw unchanged
+        ''' </para>
+        ''' </summary>
+        Public Function StripLiterals(raw As String, tokens As List(Of MaskToken)) As String
+            ' Only normalise input when the mask actually has embedded literal separators.
+            ' A mask with no literals doesn't need stripping — the placeholder logic already
+            ' handles unexpected characters (9 emits a space for non-digits, etc.).
+            Dim hasLiteralToken = tokens.Exists(Function(t) t.Kind = MaskToken.TokenKind.Literal)
+            If Not hasLiteralToken Then Return raw
+
+            Dim hasAlphanumeric = tokens.Exists(Function(t) t.Kind = MaskToken.TokenKind.Alphanumeric)
+            Dim hasLetter       = tokens.Exists(Function(t) t.Kind = MaskToken.TokenKind.UpperCase OrElse
+                                                              t.Kind = MaskToken.TokenKind.LowerCase)
+            Dim hasDigit        = tokens.Exists(Function(t) t.Kind = MaskToken.TokenKind.Digit OrElse
+                                                              t.Kind = MaskToken.TokenKind.ZeroFill)
+
+            Dim sb As New StringBuilder(raw.Length)
+            For Each ch In raw
+                If hasAlphanumeric Then
+                    ' X accepts any char — keep alphanumerics; strip punctuation/separators
+                    If Char.IsLetterOrDigit(ch) Then sb.Append(ch)
+                ElseIf hasLetter Then
+                    If Char.IsLetter(ch) Then sb.Append(ch)
+                ElseIf hasDigit Then
+                    If Char.IsDigit(ch) Then sb.Append(ch)
+                End If
             Next
             Return sb.ToString()
         End Function

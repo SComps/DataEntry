@@ -623,6 +623,45 @@ Namespace DataEntry.Tests
             Assert.Equal("12/25/2025", Apply("12252025", "99\/99\/9999", 10))
         End Sub
 
+        <Fact>
+        Public Sub Phone_PreFormatted_HyphensAlreadyPresent()
+            ' User typed the formatted value 800-867-5309 — hyphens should be stripped
+            ' and the digits re-formatted correctly.
+            Assert.Equal("800-867-5309", Apply("800-867-5309", "999\-999\-9999", 12))
+        End Sub
+
+        <Fact>
+        Public Sub Phone_PreFormatted_ParensAndHyphens()
+            ' User typed (800)867-5309 — both parens, closing paren, and hyphens
+            ' should all be stripped leaving only the digits.
+            Assert.Equal("800-867-5309", Apply("(800)867-5309", "999\-999\-9999", 12))
+        End Sub
+
+        <Fact>
+        Public Sub Date_PreFormatted_SlashesAlreadyPresent()
+            ' User typed 12/25/2025 — slashes already in place.
+            Assert.Equal("12/25/2025", Apply("12/25/2025", "99\/99\/9999", 10))
+        End Sub
+
+        ' ── No FORMAT mask — verbatim pass-through ────────────────────────────
+
+        <Fact>
+        Public Sub NoMask_PlainText_PassedThroughVerbatim()
+            ' A field with no FORMAT at all (empty token list) must store the
+            ' user's text exactly as typed — spaces, punctuation and all.
+            Assert.Equal("123 ANYSTREET     ", Apply("123 ANYSTREET", "", 18))
+        End Sub
+
+        <Fact>
+        Public Sub NoMask_ExactLength_NoChange()
+            Assert.Equal("HELLO", Apply("HELLO", "", 5))
+        End Sub
+
+        <Fact>
+        Public Sub NoMask_TooLong_Truncated()
+            Assert.Equal("ABCDE", Apply("ABCDEFGH", "", 5))
+        End Sub
+
         ' ── Plain digit / zero-fill masks ─────────────────────────────────────
 
         <Fact>
@@ -668,6 +707,24 @@ Namespace DataEntry.Tests
         <Fact>
         Public Sub Alpha_X_CopiesAsIs()
             Assert.Equal("Hello", Apply("Hello", "XXXXX", 5))
+        End Sub
+
+        <Fact>
+        Public Sub Alpha_X_SpacesInAddressPreserved()
+            ' "123 ANY STREET" typed into a 30-X field — spaces must survive intact.
+            Assert.Equal("123 ANY STREET                ", Apply("123 ANY STREET", "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", 30))
+        End Sub
+
+        <Fact>
+        Public Sub Alpha_X_LetterXInAddressNotStripped()
+            ' "100 X STREET" — the letter X in the data must not be treated as a mask char.
+            Assert.Equal("100 X STREET                  ", Apply("100 X STREET", "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", 30))
+        End Sub
+
+        <Fact>
+        Public Sub Alpha_X_PunctuationPreserved()
+            ' Punctuation (apostrophe, period, comma) must pass through an X mask unchanged.
+            Assert.Equal("O'BRIEN, J.               ", Apply("O'BRIEN, J.", "XXXXXXXXXXXXXXXXXXXXXXXXXX", 26))
         End Sub
 
         <Fact>

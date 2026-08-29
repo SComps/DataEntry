@@ -42,7 +42,8 @@ dotnet publish "$PROJECT" \
   --output "$OUTPUT_DIR"
 
 echo "Copying docs..."
-[ -f "$SCRIPT_DIR/MANUAL.md" ] && cp "$SCRIPT_DIR/MANUAL.md" "$OUTPUT_DIR/MANUAL.md"
+[ -f "$SCRIPT_DIR/MANUAL.md"  ] && cp "$SCRIPT_DIR/MANUAL.md"  "$OUTPUT_DIR/MANUAL.md"
+[ -f "$SCRIPT_DIR/INSTALL.md" ] && cp "$SCRIPT_DIR/INSTALL.md" "$OUTPUT_DIR/INSTALL.md"
 
 chmod +x "$OUTPUT_DIR/dataentry" 2>/dev/null || chmod +x "$OUTPUT_DIR/DataEntry" 2>/dev/null || true
 

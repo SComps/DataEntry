@@ -48,7 +48,8 @@ dotnet publish "%PROJECT%" ^
 if %ERRORLEVEL% neq 0 ( echo. & echo [FAIL] dotnet publish failed. & endlocal & exit /b 1 )
 
 echo Copying docs...
-if exist "%SCRIPT_DIR%MANUAL.md" copy /Y "%SCRIPT_DIR%MANUAL.md" "%OUTPUT_DIR%\MANUAL.md" >nul
+if exist "%SCRIPT_DIR%MANUAL.md"  copy /Y "%SCRIPT_DIR%MANUAL.md"  "%OUTPUT_DIR%\MANUAL.md"  >nul
+if exist "%SCRIPT_DIR%INSTALL.md" copy /Y "%SCRIPT_DIR%INSTALL.md" "%OUTPUT_DIR%\INSTALL.md" >nul
 
 echo Creating archive...
 set "ZIP=%SCRIPT_DIR%publish\DataEntry-win-x64.zip"

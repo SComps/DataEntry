@@ -21,7 +21,8 @@ When you unzip (Windows) or untar (Linux/macOS) a DataEntry release you get:
 ```
 DataEntry.exe       (Windows) or dataentry (Linux/macOS)
 libonigwrap.dll     (Windows) or libonigwrap.so / .dylib  — must stay beside the exe
-MANUAL.md           this file
+INSTALL.md          installation and SDK setup guide
+MANUAL.md           language reference and user guide
 Samples\
     sample.def      simple customer-entry starter form
     customer.def    full customer master with address and contact sections

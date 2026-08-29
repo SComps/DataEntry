@@ -12,6 +12,10 @@ Imports System.Collections.Generic
 
     Public Class DslValidator
 
+        ' Screen size constants — single source of truth for boundary checks.
+        Private Const MaxCols As Integer = 80
+        Private Const MaxRows As Integer = 24
+
         Private ReadOnly _doc As DslDocument
         Private ReadOnly _errors As New List(Of ValidationError)
 
@@ -37,6 +41,17 @@ Imports System.Collections.Generic
 
             If ds.Lrecl <= 0 Then
                 AddError(ds.Line, 0, "LRECL must be greater than zero.")
+            End If
+
+            ' Warn if FILE path contains '..' (traversal) or is absolute (rooted).
+            ' The audience is programmers who may use relative paths intentionally,
+            ' so this is a warning rather than a hard error.
+            If Not String.IsNullOrEmpty(ds.FilePath) Then
+                If ds.FilePath.Contains("..") OrElse IO.Path.IsPathRooted(ds.FilePath) Then
+                    AddWarning(ds.Line, 0,
+                        $"FILE path '{ds.FilePath}' contains a path traversal segment or is absolute. " &
+                        "Verify the path is intentional — the generated application will write to this location.")
+                End If
             End If
 
             ' Check for duplicate record names
@@ -74,15 +89,27 @@ Imports System.Collections.Generic
                         $"(START={startPos} LEN={fld.Len}) exceeds LRECL={lrecl}.")
                 End If
 
-                ' Check FORMAT mask length matches LEN
+                ' Check FORMAT mask length vs LEN.
+                ' Mask longer than LEN will corrupt adjacent record data — hard Error.
+                ' Mask shorter than LEN is valid (partial-fill pattern) — Warning only.
                 Dim fmt = fld.Format
-                If Not String.IsNullOrEmpty(fmt.Raw) AndAlso fmt.Tokens.Count <> fld.Len Then
-                    AddWarning(fld.Line, 0,
-                        $"Field '{fld.Name}': FORMAT mask length ({fmt.Tokens.Count}) " &
-                        $"does not match LEN={fld.Len}.")
+                If Not String.IsNullOrEmpty(fmt.Raw) Then
+                    If fmt.Tokens.Count > fld.Len Then
+                        AddError(fld.Line, 0,
+                            $"Field '{fld.Name}': FORMAT mask length ({fmt.Tokens.Count}) " &
+                            $"exceeds LEN={fld.Len}. Excess mask characters would corrupt adjacent record data.")
+                    ElseIf fmt.Tokens.Count < fld.Len Then
+                        AddWarning(fld.Line, 0,
+                            $"Field '{fld.Name}': FORMAT mask length ({fmt.Tokens.Count}) " &
+                            $"is shorter than LEN={fld.Len}. The tail of the field will be space/zero padded.")
+                    End If
                 End If
 
-                pos = startPos + fld.Len   ' advance implicit position
+                ' Implicit position tracking: when START is omitted, place this field
+                ' immediately after the previous field (or after the last explicitly-
+                ' positioned field if the previous field had an explicit START).
+                ' This mirrors COBOL sequential field layout.
+                pos = startPos + fld.Len   ' advance implicit cursor
             Next
         End Sub
 
@@ -121,9 +148,9 @@ Imports System.Collections.Generic
                     Dim txtLen = Math.Max(1, pr.Text.Length)
                     Dim startCol = pr.Col
                     Dim endCol = pr.Col + txtLen - 1
-                    If pr.Row < 1 OrElse pr.Row > 24 OrElse pr.Col < 1 OrElse endCol > 80 Then
+                    If pr.Row < 1 OrElse pr.Row > MaxRows OrElse pr.Col < 1 OrElse endCol > MaxCols Then
                         AddError(pr.Line, 0,
-                            $"Prompt '{pr.Text}' (ROW={pr.Row} COL={startCol}..{endCol}) exceeds screen boundaries (80 columns x 24 rows).")
+                            $"Prompt '{pr.Text}' (ROW={pr.Row} COL={startCol}..{endCol}) exceeds screen boundaries ({MaxCols} columns x {MaxRows} rows).")
                     End If
                     spans.Add(New RenderedSpan With {
                         .Name = $"Prompt '{pr.Text}'",
@@ -155,7 +182,7 @@ Imports System.Collections.Generic
                     If Not String.IsNullOrEmpty(sfld.ValidateFunc) Then
                         AddWarning(sfld.Line, 0,
                             $"VALIDATE WITH '{sfld.ValidateFunc}' — ensure this function is defined " &
-                            "in the generated code.", "Warning")
+                            "in the generated code.")
                     End If
 
                     ' Color name validation
@@ -170,9 +197,9 @@ Imports System.Collections.Generic
                         Dim pCol = If(sfld.PromptCol <> -1, sfld.PromptCol, sfld.Col)
                         Dim pLen = sfld.Label.Length + 1
                         Dim pEnd = pCol + pLen - 1
-                        If pRow < 1 OrElse pRow > 24 OrElse pCol < 1 OrElse pEnd > 80 Then
+                        If pRow < 1 OrElse pRow > MaxRows OrElse pCol < 1 OrElse pEnd > MaxCols Then
                             AddError(sfld.Line, 0,
-                                $"Prompt '{sfld.Label}' (ROW={pRow} COL={pCol}..{pEnd}) exceeds screen boundaries (80 columns x 24 rows).")
+                                $"Prompt '{sfld.Label}' (ROW={pRow} COL={pCol}..{pEnd}) exceeds screen boundaries ({MaxCols} columns x {MaxRows} rows).")
                         End If
                         spans.Add(New RenderedSpan With {
                             .Name = $"Prompt '{sfld.Label}'",
@@ -195,9 +222,9 @@ Imports System.Collections.Generic
                     End If
 
                     Dim tfEnd = tfCol + Math.Max(1, sfld.Len) - 1
-                    If tfRow < 1 OrElse tfRow > 24 OrElse tfCol < 1 OrElse tfEnd > 80 Then
+                    If tfRow < 1 OrElse tfRow > MaxRows OrElse tfCol < 1 OrElse tfEnd > MaxCols Then
                         AddError(sfld.Line, 0,
-                            $"{fieldId} (ROW={tfRow} COL={tfCol}..{tfEnd}) exceeds screen boundaries (80 columns x 24 rows).")
+                            $"{fieldId} (ROW={tfRow} COL={tfCol}..{tfEnd}) exceeds screen boundaries ({MaxCols} columns x {MaxRows} rows).")
                     End If
                     spans.Add(New RenderedSpan With {
                         .Name = fieldId,
@@ -236,10 +263,14 @@ Imports System.Collections.Generic
             End If
         End Sub
 
+        ' Must match the names that ColorHelper.ToColor16 resolves (including Bright* variants).
+        ' Aliases like "Red" (= DarkRed) are accepted as colour names here too.
         Private Shared ReadOnly ValidColors As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase) From {
             "Black", "DarkRed", "DarkGreen", "DarkYellow", "DarkBlue",
             "DarkMagenta", "DarkCyan", "Gray", "DarkGray",
-            "Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White"
+            "Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White",
+            "BrightRed", "BrightGreen", "BrightYellow", "BrightBlue",
+            "BrightMagenta", "BrightCyan"
         }
 
         Private Shared Function IsValidColorName(name As String) As Boolean
@@ -255,10 +286,9 @@ Imports System.Collections.Generic
             })
         End Sub
 
-        Private Sub AddWarning(line As Integer, col As Integer, msg As String,
-                               Optional severity As String = "Warning")
+        Private Sub AddWarning(line As Integer, col As Integer, msg As String)
             _errors.Add(New ValidationError With {
-                .Line = line, .Col = col, .Message = msg, .Severity = severity
+                .Line = line, .Col = col, .Message = msg, .Severity = "Warning"
             })
         End Sub
 

@@ -23,23 +23,17 @@ Namespace DataEntry.Tests
     ' ─────────────────────────────────────────────────────────────────────────
     Public Module TestHelpers
 
-        ''' <summary>Load a .def file that was compiled as an embedded resource.</summary>
+        ''' <summary>Load a .def sample file from the Samples output directory.</summary>
         Public Function LoadSample(name As String) As String
-            Dim asm = Assembly.GetExecutingAssembly()
-            ' Resource name is the assembly's default namespace + filename.
-            ' The test project has no explicit RootNamespace so the name is just
-            ' DataEntry.Tests.<name> (the Samples subfolder is not included).
-            Dim resName = $"DataEntry.Tests.{name}"
-            Using stream = asm.GetManifestResourceStream(resName)
-                If stream Is Nothing Then
-                    Throw New InvalidOperationException(
-                        $"Embedded resource '{resName}' not found. " &
-                        $"Available: {String.Join(", ", asm.GetManifestResourceNames())}")
-                End If
-                Using reader As New StreamReader(stream)
-                    Return reader.ReadToEnd()
-                End Using
-            End Using
+            ' .def files are copied to the output directory under Samples\
+            Dim exeDir   = IO.Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
+            Dim filePath = IO.Path.Combine(exeDir, "Samples", name)
+            If Not File.Exists(filePath) Then
+                Throw New InvalidOperationException(
+                    $"Sample file not found: {filePath}. " &
+                    "Ensure Samples\*.def has CopyToOutputDirectory=PreserveNewest in the test project.")
+            End If
+            Return File.ReadAllText(filePath)
         End Function
 
         ''' <summary>Parse a DSL string and return (document, parseErrors).</summary>
@@ -203,15 +197,15 @@ Namespace DataEntry.Tests
         <Fact>
         Public Sub CodeGen_ProducesOutput()
             Dim result = ParseAndValidate(_src)
-            Dim outDir = Path.Combine(Path.GetTempPath(), $"cg_customer_{Guid.NewGuid():N}")
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_customer_{Guid.NewGuid():N}")
             Try
                 Dim gen As New CodeGenerator()
                 gen.GenerateProject(result.Doc, outDir)
-                Assert.True(File.Exists(Path.Combine(outDir, "Program.vb")))
-                Assert.True(File.Exists(Path.Combine(outDir, "MainForm.vb")))
-                Assert.True(File.Exists(Path.Combine(outDir, "DataFile.vb")))
-                Assert.True(File.Exists(Path.Combine(outDir, "FormatHelper.vb")))
-                Assert.True(File.Exists(Path.Combine(outDir, "ColorHelper.vb")))
+                Assert.True(File.Exists(IO.Path.Combine(outDir, "Program.vb")))
+                Assert.True(File.Exists(IO.Path.Combine(outDir, "MainForm.vb")))
+                Assert.True(File.Exists(IO.Path.Combine(outDir, "DataFile.vb")))
+                Assert.True(File.Exists(IO.Path.Combine(outDir, "FormatHelper.vb")))
+                Assert.True(File.Exists(IO.Path.Combine(outDir, "ColorHelper.vb")))
 
                 Dim projFiles = Directory.GetFiles(outDir, "*.vbproj")
                 Assert.Single(projFiles)
@@ -307,14 +301,14 @@ Namespace DataEntry.Tests
         <Fact>
         Public Sub CodeGen_ValidationStubFileCreated()
             Dim result = ParseAndValidate(_src)
-            Dim outDir = Path.Combine(Path.GetTempPath(), $"cg_inv_{Guid.NewGuid():N}")
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_inv_{Guid.NewGuid():N}")
             Try
                 Dim gen As New CodeGenerator()
                 gen.GenerateProject(result.Doc, outDir)
-                Assert.True(File.Exists(Path.Combine(outDir, "ValidationFunctions.vb")),
+                Assert.True(File.Exists(IO.Path.Combine(outDir, "ValidationFunctions.vb")),
                     "ValidationFunctions.vb should be generated when VALIDATE WITH is used")
                 ' Stub file should contain the three function names
-                Dim content = File.ReadAllText(Path.Combine(outDir, "ValidationFunctions.vb"))
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "ValidationFunctions.vb"))
                 Assert.Contains("CHECKSKU", content)
                 Assert.Contains("CHECKQTY", content)
                 Assert.Contains("CHECKPRICE", content)
@@ -383,9 +377,10 @@ Namespace DataEntry.Tests
             Dim result = ParseDsl(_src)
             Dim fld = result.Doc.Data.Records(0).Fields.Find(Function(f) f.Name = "WEEKEND")
             Assert.NotNull(fld)
-            ' 99\/99\/9999 → 2 digit + literal(/) + 2 digit + literal(/) + 4 digit = 10 tokens, LEN=8
-            ' LEN=8 but mask is 10 tokens — validator should warn about mismatch
-            Assert.Equal(8, fld.Len)
+            ' 99\/99\/9999 → 2 digit + literal(/) + 2 digit + literal(/) + 4 digit = 10 tokens, LEN=10
+            ' Stored value includes embedded slashes: MM/DD/YYYY = 10 chars.
+            Assert.Equal(10, fld.Len)
+            Assert.Equal(10, fld.Format.Tokens.Count)
         End Sub
 
         <Fact>
@@ -409,11 +404,11 @@ Namespace DataEntry.Tests
         <Fact>
         Public Sub CodeGen_TwoScreensMentionedInMainForm()
             Dim result = ParseAndValidate(_src)
-            Dim outDir = Path.Combine(Path.GetTempPath(), $"cg_ts_{Guid.NewGuid():N}")
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_ts_{Guid.NewGuid():N}")
             Try
                 Dim gen As New CodeGenerator()
                 gen.GenerateProject(result.Doc, outDir)
-                Dim content = File.ReadAllText(Path.Combine(outDir, "MainForm.vb"))
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
                 Assert.Contains("TIMESHEET-ENTRY", content)
                 Assert.Contains("HOURS-ENTRY", content)
             Finally
@@ -624,12 +619,12 @@ Namespace DataEntry.Tests
                       "SCREEN S" & vbCrLf &
                       "    FIELD ""F1"" ROW=1 COL=1 LEN=50 INTO R.F1"
             Dim result = ParseDsl(dsl)
-            Dim outDir = Path.Combine(Path.GetTempPath(), $"cg_df_crlf_{Guid.NewGuid():N}")
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_df_crlf_{Guid.NewGuid():N}")
             Try
                 Dim gen As New CodeGenerator()
                 gen.GenerateProject(result.Doc, outDir)
-                Dim dfContent = File.ReadAllText(Path.Combine(outDir, "DataFile.vb"))
-                Dim progContent = File.ReadAllText(Path.Combine(outDir, "Program.vb"))
+                Dim dfContent = File.ReadAllText(IO.Path.Combine(outDir, "DataFile.vb"))
+                Dim progContent = File.ReadAllText(IO.Path.Combine(outDir, "Program.vb"))
 
                 Assert.Contains("Private Const FilePath As String = ""test.dat""", dfContent)
                 Assert.Contains("Private Const Lrecl   As Integer = 50", dfContent)
@@ -653,11 +648,11 @@ Namespace DataEntry.Tests
                       "SCREEN S" & vbCrLf &
                       "    FIELD ""F1"" ROW=1 COL=1 LEN=80 INTO R.F1"
             Dim result = ParseDsl(dsl)
-            Dim outDir = Path.Combine(Path.GetTempPath(), $"cg_df_lf_{Guid.NewGuid():N}")
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_df_lf_{Guid.NewGuid():N}")
             Try
                 Dim gen As New CodeGenerator()
                 gen.GenerateProject(result.Doc, outDir)
-                Dim dfContent = File.ReadAllText(Path.Combine(outDir, "DataFile.vb"))
+                Dim dfContent = File.ReadAllText(IO.Path.Combine(outDir, "DataFile.vb"))
 
                 Assert.Contains("Private Const FilePath As String = ""out.dat""", dfContent)
                 Assert.Contains("Private Const Lrecl   As Integer = 80", dfContent)
@@ -683,11 +678,11 @@ Namespace DataEntry.Tests
                       "    FIELD ""F1"" ROW=1 COL=1 LEN=10 INTO R.F1" & vbCrLf &
                       "    FIELD ""F2"" ROW=2 COL=1 LEN=10 INTO R.F2"
             Dim result = ParseDsl(dsl)
-            Dim outDir = Path.Combine(Path.GetTempPath(), $"cg_advf_{Guid.NewGuid():N}")
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_advf_{Guid.NewGuid():N}")
             Try
                 Dim gen As New CodeGenerator()
                 gen.GenerateProject(result.Doc, outDir)
-                Dim mfContent = File.ReadAllText(Path.Combine(outDir, "MainForm.vb"))
+                Dim mfContent = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
 
                 Assert.Contains("fld.InsertionPoint = 0", mfContent)
                 Assert.Contains("fld.SuperView?.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop)", mfContent)
@@ -846,5 +841,143 @@ Namespace DataEntry.Tests
         End Sub
 
     End Class
+
+
+    ' ─────────────────────────────────────────────────────────────────────────
+    ' FullBehaviorTests — FULL= attribute parsing, defaults, and codegen output
+    ' ─────────────────────────────────────────────────────────────────────────
+    Public Class FullBehaviorTests
+
+        Private Shared ReadOnly BaseDsl As String =
+            "DATA-SECTION" & vbCrLf &
+            "    FILE out.dat APPEND LRECL=20 LEND=CRLF" & vbCrLf &
+            "RECORD R" & vbCrLf &
+            "    F1 LEN=10" & vbCrLf &
+            "    FORMAT=XXXXXXXXXX." & vbCrLf &
+            "    F2 LEN=10" & vbCrLf &
+            "    FORMAT=XXXXXXXXXX." & vbCrLf &
+            "SCREEN-SECTION" & vbCrLf &
+            "SCREEN S" & vbCrLf
+
+        <Fact>
+        Public Sub Field_FullStay_ParsesCorrectly()
+            Dim dsl = BaseDsl &
+                      "    FIELD ROW=1 COL=1 LEN=10 INTO R.F1" & vbCrLf &
+                      "        FULL=STAY" & vbCrLf &
+                      "    FIELD ROW=2 COL=1 LEN=10 INTO R.F2"
+            Dim res = ParseAndValidate(dsl)
+            Assert.Empty(res.ParseErrs)
+            Assert.Empty(HardErrors(res.ValidErrs))
+            Assert.Equal(FullBehavior.Stay, res.Doc.Screens(0).Fields(0).Full)
+        End Sub
+
+        <Fact>
+        Public Sub Field_FullAdvance_ParsesCorrectly()
+            Dim dsl = BaseDsl &
+                      "    FIELD ROW=1 COL=1 LEN=10 INTO R.F1" & vbCrLf &
+                      "        FULL=ADVANCE" & vbCrLf &
+                      "    FIELD ROW=2 COL=1 LEN=10 INTO R.F2"
+            Dim res = ParseAndValidate(dsl)
+            Assert.Empty(res.ParseErrs)
+            Assert.Empty(HardErrors(res.ValidErrs))
+            Assert.Equal(FullBehavior.Advance, res.Doc.Screens(0).Fields(0).Full)
+        End Sub
+
+        <Fact>
+        Public Sub Field_FullOmitted_DefaultsToAdvance()
+            Dim dsl = BaseDsl &
+                      "    FIELD ROW=1 COL=1 LEN=10 INTO R.F1" & vbCrLf &
+                      "    FIELD ROW=2 COL=1 LEN=10 INTO R.F2"
+            Dim res = ParseAndValidate(dsl)
+            Assert.Empty(res.ParseErrs)
+            Assert.Equal(FullBehavior.Advance, res.Doc.Screens(0).Fields(0).Full)
+            Assert.Equal(FullBehavior.Advance, res.Doc.Screens(0).Fields(1).Full)
+        End Sub
+
+        <Fact>
+        Public Sub Field_FullInvalidValue_ReturnsParseError()
+            Dim dsl = BaseDsl &
+                      "    FIELD ROW=1 COL=1 LEN=10 INTO R.F1" & vbCrLf &
+                      "        FULL=BOGUS" & vbCrLf &
+                      "    FIELD ROW=2 COL=1 LEN=10 INTO R.F2"
+            Dim res = ParseAndValidate(dsl)
+            ' Parser should emit an error and default to Advance
+            Assert.NotEmpty(res.ParseErrs)
+            Assert.Contains(res.ParseErrs, Function(e) e.Message.Contains("FULL"))
+            Assert.Equal(FullBehavior.Advance, res.Doc.Screens(0).Fields(0).Full)
+        End Sub
+
+        <Fact>
+        Public Sub CodeGen_FullStay_DoesNotContainAdvanceFocusInTextChanged()
+            Dim dsl = BaseDsl &
+                      "    FIELD ROW=1 COL=1 LEN=10 INTO R.F1" & vbCrLf &
+                      "        FULL=STAY" & vbCrLf &
+                      "    FIELD ROW=2 COL=1 LEN=10 INTO R.F2"
+            Dim result = ParseDsl(dsl)
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_fullstay_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim mfContent = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+
+                ' The STAY field's TextChanged handler should pin InsertionPoint but NOT advance focus
+                Assert.Contains("pin cursor at end, no advance", mfContent)
+                ' AdvanceFocus should still exist (for the second field's Enter handler), but
+                ' the TextChanged block for the STAY field must not call it
+                Dim stayBlock = mfContent.Substring(0, mfContent.IndexOf("pin cursor at end, no advance"))
+                Assert.DoesNotContain("AdvanceFocus", stayBlock.Substring(stayBlock.LastIndexOf("TextChanged")))
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        <Fact>
+        Public Sub CodeGen_FullAdvance_ContainsAdvanceFocusInTextChanged()
+            Dim dsl = BaseDsl &
+                      "    FIELD ROW=1 COL=1 LEN=10 INTO R.F1" & vbCrLf &
+                      "        FULL=ADVANCE" & vbCrLf &
+                      "    FIELD ROW=2 COL=1 LEN=10 INTO R.F2"
+            Dim result = ParseDsl(dsl)
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_fulladvance_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim mfContent = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+                Assert.Contains("AdvanceFocus", mfContent)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        <Fact>
+        Public Sub CodeGen_TextChanging_CancelsEditWhenFull_NotSubstring()
+            ' The TextChanging handler must cancel the edit (set to current text) not truncate,
+            ' to prevent Terminal.Gui's ScrollOffset from advancing.
+            Dim dsl = BaseDsl &
+                      "    FIELD ROW=1 COL=1 LEN=10 INTO R.F1" & vbCrLf &
+                      "    FIELD ROW=2 COL=1 LEN=10 INTO R.F2"
+            Dim result = ParseDsl(dsl)
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_textchanging_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim mfContent = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+
+                ' The TextChanging handler must use the cancel-pattern (DirectCast + current text),
+                ' not truncate via Substring, to prevent Terminal.Gui ScrollOffset advancing.
+                Assert.Contains("DirectCast(sender, TextField).Text  ' cancel", mfContent)
+                ' Confirm the TextChanging block itself does not use Substring —
+                ' isolate just that block (between TextChanging and the closing End Sub)
+                Dim tcStart = mfContent.IndexOf("AddHandler _S_0.TextChanging")
+                Dim tcEnd   = mfContent.IndexOf("End Sub", tcStart)
+                Dim tcBlock = mfContent.Substring(tcStart, tcEnd - tcStart)
+                Assert.DoesNotContain("ev.Result.Substring", tcBlock)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+    End Class
+
 
 End Namespace

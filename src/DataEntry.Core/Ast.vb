@@ -10,6 +10,18 @@ Imports System.Collections.Generic
         Public Property Bg As String = "DarkBlue"
     End Class
 
+    ' ── Field full-behaviour ─────────────────────────────────────────────────
+
+    ''' <summary>
+    ''' Controls what happens the instant a field reaches its LEN capacity.
+    ''' Advance (default) — automatically move focus to the next field (or save if last).
+    ''' Stay             — lock the cursor at the end; inhibit further entry until Tab/Enter.
+    ''' </summary>
+    Public Enum FullBehavior
+        Advance     ' FULL=ADVANCE  (default when FULL= is omitted)
+        Stay        ' FULL=STAY
+    End Enum
+
     ' ── Data Section ─────────────────────────────────────────────────────────
 
     Public Enum AppendMode
@@ -96,6 +108,7 @@ Imports System.Collections.Generic
         Public Property NormalColor As ColorSpec = Nothing  ' Nothing = inherit screen default
         Public Property FocusColor As ColorSpec = Nothing
         Public Property ErrorColor As ColorSpec = Nothing
+        Public Property Full As FullBehavior = FullBehavior.Advance  ' FULL= attribute
         Public Property Line As Integer
     End Class
 

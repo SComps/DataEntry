@@ -375,14 +375,14 @@ Imports System.Collections.Generic
                 End If
             Loop
 
-            ' Optional color attributes on continuation lines (NORMAL= FOCUS= ERROR=)
+            ' Optional color/behavior attributes on continuation lines (NORMAL= FOCUS= ERROR= FULL=)
             SkipNewlines()
             Do While Not AtEof() AndAlso Not IsKeyword("FIELD") AndAlso
                      Not IsKeyword("PROMPT") AndAlso Not IsKeyword("LABEL") AndAlso
                      Not IsKeyword("SCREEN") AndAlso Not IsKeyword("DATA-SECTION") AndAlso
                      Not IsKeyword("SCREEN-SECTION")
 
-                If IsKeyword("NORMAL") OrElse IsKeyword("FOCUS") OrElse IsKeyword("ERROR") Then
+                If IsKeyword("NORMAL") OrElse IsKeyword("FOCUS") OrElse IsKeyword("ERROR") OrElse IsKeyword("FULL") Then
                     ParseFieldColorLine(fld)
                     SkipNewlines()
                 Else
@@ -393,7 +393,7 @@ Imports System.Collections.Generic
             Return fld
         End Function
 
-        ''' <summary>Parse a line of  NORMAL=x FOCUS=y ERROR=z  color attributes onto fld.</summary>
+        ''' <summary>Parse a line of  NORMAL=x FOCUS=y ERROR=z FULL=x  color/behavior attributes onto fld.</summary>
         Private Sub ParseFieldColorLine(fld As ScreenField)
             Do While Not AtLineEnd() AndAlso Not AtEof()
                 If IsKeyword("NORMAL") Then
@@ -405,6 +405,18 @@ Imports System.Collections.Generic
                 ElseIf IsKeyword("ERROR") Then
                     Consume() : Expect(TokenType.Equals)
                     fld.ErrorColor = ParseOneColor()
+                ElseIf IsKeyword("FULL") Then
+                    Consume() : Expect(TokenType.Equals)
+                    Dim val = ConsumeValue("FULL value (ADVANCE or STAY)")
+                    Select Case val.ToUpperInvariant()
+                        Case "STAY"
+                            fld.Full = FullBehavior.Stay
+                        Case "ADVANCE"
+                            fld.Full = FullBehavior.Advance
+                        Case Else
+                            AddError($"Unknown FULL value '{val}' — expected ADVANCE or STAY. Defaulting to ADVANCE.", Current())
+                            fld.Full = FullBehavior.Advance
+                    End Select
                 Else
                     Exit Do
                 End If

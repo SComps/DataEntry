@@ -7,13 +7,6 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <!-- AOT publish properties — only active when PublishAot=true (i.e. during ./publish.sh) -->
-  <PropertyGroup Condition="'$(PublishAot)' == 'true'">
-    <InvariantGlobalization>true</InvariantGlobalization>
-    <!-- Suppress trim warnings from Terminal.Gui's reflection-based config system -->
-    <SuppressTrimAnalysisWarnings>true</SuppressTrimAnalysisWarnings>
-  </PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\DataEntry.Core\DataEntry.Core.vbproj" />
   </ItemGroup>

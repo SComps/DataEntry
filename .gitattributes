@@ -3,6 +3,12 @@
 ###############################################################################
 * text=auto
 
+# Shell scripts must always use LF line endings — CRLF breaks bash on Linux/macOS.
+*.sh    text eol=lf
+
+# Windows batch files use CRLF.
+*.cmd   text eol=crlf
+
 ###############################################################################
 # Set default behavior for command prompt diff.
 #

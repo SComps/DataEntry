@@ -24,6 +24,8 @@ Imports Terminal.Gui.Drawing
                 Case "brightmagenta"             : Return ColorName16.BrightMagenta
                 Case "brightcyan"                : Return ColorName16.BrightCyan
                 Case "white"                     : Return ColorName16.White
+                ' Unknown names fall back to Gray. DslValidator.CheckColorSpec already
+                ' emits a Warning upstream so the user is informed before reaching here.
                 Case Else                        : Return ColorName16.Gray
             End Select
         End Function

@@ -9,10 +9,15 @@ Imports System.Collections.Generic
 
         ''' <summary>Generate the full project into outputDir, creating it if needed.</summary>
         Public Sub GenerateProject(doc As DslDocument, outputDir As String)
-            Directory.CreateDirectory(outputDir)
+            Try
+                Directory.CreateDirectory(outputDir)
+            Catch ex As Exception
+                Throw New InvalidOperationException(
+                    $"Cannot create output directory '{outputDir}': {ex.Message}", ex)
+            End Try
 
             ' Derive a safe project name from the directory name
-            Dim projName = MakeSafeName(Path.GetFileName(outputDir.TrimEnd(Path.DirectorySeparatorChar)))
+            Dim projName = MakeSafeName(IO.Path.GetFileName(outputDir.TrimEnd(IO.Path.DirectorySeparatorChar)))
             If String.IsNullOrEmpty(projName) Then projName = "DataEntryApp"
 
             WriteProjectFile(outputDir, projName)
@@ -400,15 +405,31 @@ Imports System.Collections.Generic
                     sb.AppendLine($"            _allFields.Add({vn})")
                     sb.AppendLine($"            AddHandler {vn}.KeyDown, AddressOf OnKeyDown")
 
-                    ' Enforce max length
+                    ' Enforce max length — cancel the edit entirely when full to prevent Terminal.Gui
+                    ' from advancing its internal ScrollOffset (which would shift text left).
                     sb.AppendLine($"            AddHandler {vn}.TextChanging, Sub(sender As Object, ev As ResultEventArgs(Of String))")
                     sb.AppendLine($"                If ev.Result IsNot Nothing AndAlso ev.Result.Length > {sfld.Len} Then")
-                    sb.AppendLine($"                    ev.Result = ev.Result.Substring(0, {sfld.Len})")
+                    sb.AppendLine($"                    ev.Result = DirectCast(sender, TextField).Text  ' cancel — keeps scroll offset stable")
                     sb.AppendLine($"                End If")
                     sb.AppendLine($"            End Sub")
 
-                    If isLastField Then
-                        ' Last field auto-saves on completion
+                    If sfld.Full = FullBehavior.Stay Then
+                        ' FULL=STAY — hold cursor at end, inhibit auto-advance/auto-save
+                        sb.AppendLine($"            AddHandler {vn}.TextChanged, Sub(sender As Object, ev As EventArgs)")
+                        sb.AppendLine($"                Dim fld = DirectCast(sender, TextField)")
+                        sb.AppendLine($"                If fld.HasFocus AndAlso fld.Text IsNot Nothing AndAlso fld.Text.Length = {sfld.Len} Then")
+                        sb.AppendLine($"                    fld.InsertionPoint = {sfld.Len - 1}  ' pin cursor at end, no advance")
+                        sb.AppendLine($"                End If")
+                        sb.AppendLine($"            End Sub")
+                        sb.AppendLine($"            AddHandler {vn}.KeyDown, Sub(sender As Object, ev As Key)")
+                        sb.AppendLine($"                If ev = Key.Enter Then")
+                        sb.AppendLine($"                    Dim fld = DirectCast(sender, TextField)")
+                        sb.AppendLine($"                    fld.SuperView?.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop)")
+                        sb.AppendLine($"                    ev.Handled = True")
+                        sb.AppendLine($"                End If")
+                        sb.AppendLine($"            End Sub")
+                    ElseIf isLastField Then
+                        ' FULL=ADVANCE, last field — auto-save on completion
                         sb.AppendLine($"            AddHandler {vn}.TextChanged, Sub(sender As Object, ev As EventArgs)")
                         sb.AppendLine($"                Dim fld = DirectCast(sender, TextField)")
                         sb.AppendLine($"                If fld.HasFocus AndAlso fld.Text IsNot Nothing AndAlso fld.Text.Length = {sfld.Len} Then")
@@ -426,7 +447,7 @@ Imports System.Collections.Generic
                         sb.AppendLine($"                End If")
                         sb.AppendLine($"            End Sub")
                     Else
-                        ' Intermediate fields auto-advance to next field
+                        ' FULL=ADVANCE, intermediate field — auto-advance to next field
                         sb.AppendLine($"            AddHandler {vn}.TextChanged, Sub(sender As Object, ev As EventArgs)")
                         sb.AppendLine($"                Dim fld = DirectCast(sender, TextField)")
                         sb.AppendLine($"                If fld.HasFocus AndAlso fld.Text IsNot Nothing AndAlso fld.Text.Length = {sfld.Len} Then")
@@ -603,8 +624,9 @@ Imports System.Collections.Generic
             sb.AppendLine("    Public Module ValidationFunctions")
             sb.AppendLine()
             For Each fn In funcs
-                sb.AppendLine($"        ' TODO: Implement {fn}")
-                sb.AppendLine($"        Public Function {fn}(value As String) As Object")
+                Dim safeFn = MakeSafeName(fn)
+                sb.AppendLine($"        ' TODO: Implement {safeFn}")
+                sb.AppendLine($"        Public Function {safeFn}(value As String) As Object")
                 sb.AppendLine($"            Return True  ' accept by default")
                 sb.AppendLine($"        End Function")
                 sb.AppendLine()
@@ -617,11 +639,12 @@ Imports System.Collections.Generic
         ' ── Utilities ─────────────────────────────────────────────────────────
 
         Private Sub Write(dir As String, filename As String, sb As StringBuilder)
-            File.WriteAllText(Path.Combine(dir, filename), sb.ToString(), System.Text.Encoding.UTF8)
+            File.WriteAllText(IO.Path.Combine(dir, filename), sb.ToString(), System.Text.Encoding.UTF8)
         End Sub
 
         Private Shared Function EscapeString(s As String) As String
-            Return s.Replace("\", "\\").Replace("""", """""")
+            ' Strip bare CR/LF so string literals in generated code are never multi-line.
+            Return s.Replace("\", "\\").Replace("""", """""").Replace(vbCr, "").Replace(vbLf, "")
         End Function
 
         Private Shared Function MakeSafeName(s As String) As String

@@ -34,7 +34,8 @@ Imports System.Collections.Generic
             "FORMAT", "START", "LEN", "ROW", "COL", "INTO", "VALIDATE", "WITH",
             "SCREEN", "COLOR", "FG", "BG", "NORMAL", "FOCUS", "ERROR",
             "PROMPT", "LABEL", "PROMPT_ROW", "PROMPT_COL", "LABEL_ROW", "LABEL_COL",
-            "FIELD_ROW", "FIELD_COL"
+            "FIELD_ROW", "FIELD_COL",
+            "FULL", "ADVANCE", "STAY"
         }
 
         Private ReadOnly _src As String
@@ -91,6 +92,12 @@ Imports System.Collections.Generic
                 ' Dot (FORMAT terminator)
                 ElseIf ch = "."c Then
                     tokens.Add(MakeTok(TokenType.Dot, ".", _line, _col))
+                    Advance()
+                    lastWasNewline = False
+
+                ' Backslash and forward-slash — significant inside FORMAT masks (e.g. 99\/99\/9999)
+                ElseIf ch = "\"c OrElse ch = "/"c Then
+                    tokens.Add(MakeTok(TokenType.Identifier, ch.ToString(), _line, _col))
                     Advance()
                     lastWasNewline = False
 

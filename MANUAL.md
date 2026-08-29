@@ -171,23 +171,36 @@ SCREEN <name>  [COLOR=<fg>On<bg>]  [FG=<color>]  [BG=<color>]
 | `INTO <rec>.<fld>` | Yes | Which record field receives this value on save |
 | `VALIDATE WITH <fn>` | No | Validation function called on save (see below) |
 
-### Field colour states
+### Field colour states and behaviour
 
-On the line(s) following a `FIELD`, you may specify up to three colour states:
+On the line(s) following a `FIELD`, you may specify colour states and the
+full-field behaviour:
 
 ```
-    NORMAL=<color>  FOCUS=<color>  ERROR=<color>
+    NORMAL=<color>  FOCUS=<color>  ERROR=<color>  FULL=<ADVANCE|STAY>
 ```
 
-| State | When it applies |
-|-------|----------------|
-| `NORMAL` | Field is visible but not focused |
-| `FOCUS` | Field is currently active (cursor is inside) |
-| `ERROR` | Validation function returned `False` |
+| Attribute | When it applies |
+|-----------|----------------|
+| `NORMAL=<color>` | Field is visible but not focused |
+| `FOCUS=<color>` | Field is currently active (cursor is inside) |
+| `ERROR=<color>` | Validation function returned `False` |
+| `FULL=ADVANCE` | When the field fills to capacity, automatically move to the next field (or save if this is the last field). **This is the default** — omitting `FULL=` is the same as writing `FULL=ADVANCE`. |
+| `FULL=STAY` | When the field fills to capacity, hold the cursor at the end and inhibit further typing. The user must press **Tab** or **Enter** to move on. Useful for fixed-width codes (state, zip, SKU) where you want the operator to review before advancing. |
 
-All three accept either a bare colour name (`White`) or the shorthand
-`<fg>On<bg>` (`WhiteOnBlue`).  Omitted states inherit the screen default or
-fall back to built-in defaults (see *Colour Names* below).
+All colour attributes accept either a bare colour name (`White`) or the
+`<fg>On<bg>` shorthand (`WhiteOnBlue`).  Omitted colour states inherit the
+screen default or fall back to built-in defaults (see *Colour Names* below).
+
+**Example — State field stays put, Zip auto-advances:**
+
+```
+FIELD ROW=12 COL=47 LEN=2 INTO CUST.CSTATE
+    NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed FULL=STAY
+
+FIELD ROW=12 COL=62 LEN=5 INTO CUST.CZIP
+    NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed FULL=ADVANCE
+```
 
 ---
 

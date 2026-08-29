@@ -127,16 +127,32 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
                 _allFields.Add(tf)
                 AddHandler tf.KeyDown, AddressOf OnKeyDown
 
-                ' Enforce max length
+                ' Enforce max length — cancel the edit entirely when full so Terminal.Gui
+                ' never advances its internal ScrollOffset (which would shift text left).
                 Dim maxLen = sfld.Len
                 AddHandler tf.TextChanging, Sub(sender As Object, ev As ResultEventArgs(Of String))
                     If ev.Result IsNot Nothing AndAlso ev.Result.Length > maxLen Then
-                        ev.Result = ev.Result.Substring(0, maxLen)
+                        ev.Result = DirectCast(sender, TextField).Text  ' cancel — keeps scroll offset stable
                     End If
                 End Sub
 
-                If isLastField Then
-                    ' Last field auto-saves in preview
+                If sfld.Full = FullBehavior.Stay Then
+                    ' FULL=STAY — hold cursor at end, inhibit auto-advance/auto-save
+                    AddHandler tf.TextChanged, Sub(sender As Object, ev As EventArgs)
+                        Dim field = DirectCast(sender, TextField)
+                        If field.HasFocus AndAlso field.Text IsNot Nothing AndAlso field.Text.Length = maxLen Then
+                            field.InsertionPoint = maxLen - 1  ' pin cursor at end, no advance
+                        End If
+                    End Sub
+                    AddHandler tf.KeyDown, Sub(sender As Object, ev As Key)
+                        If ev = Key.Enter Then
+                            Dim field = DirectCast(sender, TextField)
+                            field.SuperView?.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop)
+                            ev.Handled = True
+                        End If
+                    End Sub
+                ElseIf isLastField Then
+                    ' FULL=ADVANCE, last field — auto-save in preview
                     AddHandler tf.TextChanged, Sub(sender As Object, ev As EventArgs)
                         Dim field = DirectCast(sender, TextField)
                         If field.HasFocus AndAlso field.Text IsNot Nothing AndAlso field.Text.Length = maxLen Then
@@ -156,7 +172,7 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
                         End If
                     End Sub
                 Else
-                    ' Intermediate fields auto-advance to next field
+                    ' FULL=ADVANCE, intermediate field — auto-advance to next field
                     AddHandler tf.TextChanged, Sub(sender As Object, ev As EventArgs)
                         Dim field = DirectCast(sender, TextField)
                         If field.HasFocus AndAlso field.Text IsNot Nothing AndAlso field.Text.Length = maxLen Then
@@ -262,7 +278,7 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
             dlg.Title = "Open DSL File"
             dlg.OpenMode = OpenMode.File
             If Not String.IsNullOrEmpty(_defFile) AndAlso File.Exists(_defFile) Then
-                dlg.Path = Path.GetDirectoryName(Path.GetFullPath(_defFile))
+                dlg.Path = IO.Path.GetDirectoryName(IO.Path.GetFullPath(_defFile))
             Else
                 dlg.Path = Directory.GetCurrentDirectory()
             End If
@@ -271,9 +287,15 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
             _app.Run(dlg, Nothing)
 
             If dlg.FilePaths IsNot Nothing AndAlso dlg.FilePaths.Count > 0 Then
-                Dim path = dlg.FilePaths(0)
-                If File.Exists(path) Then
-                    Dim src = File.ReadAllText(path)
+                Dim filePath = dlg.FilePaths(0)
+                If File.Exists(filePath) Then
+                    Dim src As String
+                    Try
+                        src = File.ReadAllText(filePath)
+                    Catch ex As Exception
+                        MessageBox.Query(_app, "Error", $"Cannot read file:{Environment.NewLine}{ex.Message}", "OK")
+                        Return
+                    End Try
                     Dim lexer As New DslLexer(src)
                     Dim parser As New DslParser(lexer.Tokenize())
                     Dim newDoc = parser.Parse()
@@ -286,7 +308,7 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
                         Dim errUi As New ErrorDisplayUi(parser.Errors, valErrs)
                         errUi.Run()
                     Else
-                        Dim prev As New PreviewUi(newDoc, path, _outputDir)
+                        Dim prev As New PreviewUi(newDoc, filePath, _outputDir)
                         prev.Run()
                     End If
                 End If

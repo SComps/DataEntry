@@ -37,11 +37,14 @@ Imports System.Text
         ''' stream = True  → write each line to Console.Out in real time (--build mode).
         ''' stream = False → collect all output and return it in BuildResult.Output.
         ''' </summary>
+        ''' <summary>Timeout in milliseconds for dotnet publish (5 minutes).</summary>
+        Private Const BuildTimeoutMs As Integer = 300_000
+
         Public Shared Function Build(projectDir As String,
                                      Optional stream As Boolean = False) As BuildResult
 
             Dim rid        = CurrentRid()
-            Dim publishDir = Path.Combine(projectDir, "publish")
+            Dim publishDir = IO.Path.Combine(projectDir, "publish")
             Dim sb         As New StringBuilder
 
             Dim psi As New ProcessStartInfo With {
@@ -53,7 +56,18 @@ Imports System.Text
                 .CreateNoWindow         = True
             }
 
-            Using proc = New Process With {.StartInfo = psi}
+            Dim proc As Process
+            Try
+                proc = New Process With {.StartInfo = psi}
+            Catch ex As Exception
+                Return New BuildResult With {
+                    .Success    = False,
+                    .Output     = $"Failed to create process: {ex.Message}",
+                    .PublishDir = publishDir
+                }
+            End Try
+
+            Using proc
                 ' Wire up async output handlers so stdout and stderr don't deadlock
                 AddHandler proc.OutputDataReceived, Sub(s, e)
                     If e.Data Is Nothing Then Return
@@ -73,10 +87,32 @@ Imports System.Text
                     End If
                 End Sub
 
-                proc.Start()
+                Try
+                    proc.Start()
+                Catch ex As Exception
+                    Return New BuildResult With {
+                        .Success    = False,
+                        .Output     = $"Could not start 'dotnet': {ex.Message}. Ensure the .NET SDK is installed and on PATH.",
+                        .PublishDir = publishDir
+                    }
+                End Try
+
                 proc.BeginOutputReadLine()
                 proc.BeginErrorReadLine()
-                proc.WaitForExit()
+
+                Dim exited = proc.WaitForExit(BuildTimeoutMs)
+                If Not exited Then
+                    Try
+                        proc.Kill(entireProcessTree:=True)
+                    Catch
+                        ' Ignore kill errors — process may have already exited
+                    End Try
+                    Return New BuildResult With {
+                        .Success    = False,
+                        .Output     = $"Build timed out after {BuildTimeoutMs \ 60_000} minutes and was cancelled.",
+                        .PublishDir = publishDir
+                    }
+                End If
 
                 Return New BuildResult With {
                     .Success    = (proc.ExitCode = 0),

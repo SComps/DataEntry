@@ -17,9 +17,9 @@
     <ProjectReference Include="..\DataEntry.Core\DataEntry.Core.vbproj" />
   </ItemGroup>
 
-  <!-- Sample .def files compiled into the test assembly as embedded resources -->
+  <!-- Sample .def files copied to the build output directory so tests read from disk. -->
   <ItemGroup>
-    <EmbeddedResource Include="Samples\*.def" />
+    <None Include="Samples\*.def" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

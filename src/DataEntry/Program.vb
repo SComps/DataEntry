@@ -48,7 +48,14 @@ Namespace DataEntry
                 Environment.Exit(1)
             End If
 
-            Dim src = File.ReadAllText(defFile)
+            Dim src As String
+            Try
+                src = File.ReadAllText(defFile)
+            Catch ex As Exception
+                Console.Error.WriteLine($"Cannot read '{defFile}': {ex.Message}")
+                Environment.Exit(1)
+                Return  ' satisfies the compiler that src is definitely assigned
+            End Try
             Dim lexer As New DslLexer(src)
             Dim parser As New DslParser(lexer.Tokenize())
             Dim doc = parser.Parse()
@@ -73,9 +80,9 @@ Namespace DataEntry
 
                 ' Default output dir: subfolder named after the def file (without extension)
                 If String.IsNullOrEmpty(outputDir) Then
-                    outputDir = Path.Combine(
-                        Path.GetDirectoryName(Path.GetFullPath(defFile)),
-                        Path.GetFileNameWithoutExtension(defFile))
+                    outputDir = IO.Path.Combine(
+                        IO.Path.GetDirectoryName(IO.Path.GetFullPath(defFile)),
+                        IO.Path.GetFileNameWithoutExtension(defFile))
                 End If
 
                 Console.WriteLine($"Generating project in: {outputDir}")
@@ -93,9 +100,9 @@ Namespace DataEntry
                 errUi.Run()
             Else
                 If String.IsNullOrEmpty(outputDir) Then
-                    outputDir = Path.Combine(
-                        Path.GetDirectoryName(Path.GetFullPath(defFile)),
-                        Path.GetFileNameWithoutExtension(defFile))
+                    outputDir = IO.Path.Combine(
+                        IO.Path.GetDirectoryName(IO.Path.GetFullPath(defFile)),
+                        IO.Path.GetFileNameWithoutExtension(defFile))
                 End If
                 Dim prev As New PreviewUi(doc, defFile, outputDir)
                 prev.Run()

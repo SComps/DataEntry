@@ -704,8 +704,12 @@ Imports System.Collections.Generic
         End Sub
 
         Private Shared Function EscapeString(s As String) As String
-            ' Strip bare CR/LF so string literals in generated code are never multi-line.
-            Return s.Replace("\", "\\").Replace("""", """""").Replace(vbCr, "").Replace(vbLf, "")
+            ' Escape double-quotes for VB.NET string literals ("" is the VB escape for ").
+            ' Strip bare CR/LF so literals are never multi-line.
+            ' NOTE: backslash is NOT a VB string escape character — do not double it.
+            '       The \ in FORMAT masks (e.g. 999\-9999) must be passed through verbatim
+            '       so the ApplyMask runtime interpreter can recognise them.
+            Return s.Replace("""", """""").Replace(vbCr, "").Replace(vbLf, "")
         End Function
 
         Private Shared Function MakeSafeName(s As String) As String

@@ -406,6 +406,19 @@ Imports System.Collections.Generic
                         tf_y = sfld.Row
                     End If
 
+                    ' Compute hint from record field format tokens
+                    Dim hintTokens As New List(Of MaskToken)
+                    For Each r In doc.Data.Records
+                        If String.Equals(r.Name, sfld.IntoRecord, StringComparison.OrdinalIgnoreCase) Then
+                            For Each f In r.Fields
+                                If String.Equals(f.Name, sfld.IntoField, StringComparison.OrdinalIgnoreCase) Then
+                                    hintTokens = f.Format.Tokens
+                                End If
+                            Next
+                        End If
+                    Next
+                    Dim hint = FormatMask.FormatHint(hintTokens)
+
                     sb.AppendLine($"            {vn} = New TextField()")
                     sb.AppendLine($"            {vn}.X     = TPos.Absolute({tf_x})")
                     sb.AppendLine($"            {vn}.Y     = TPos.Absolute({tf_y})")
@@ -420,6 +433,26 @@ Imports System.Collections.Generic
                     sb.AppendLine($"            Me.Add({vn})")
                     sb.AppendLine($"            _allFields.Add({vn})")
                     sb.AppendLine($"            AddHandler {vn}.KeyDown, AddressOf OnKeyDown")
+
+                    ' Emit a muted hint label to the right of the field when the mask has embedded literals
+                    If hint.Length > 0 Then
+                        Dim hintVar = $"hint_{vn.TrimStart("_"c)}"
+                        Dim hintX   = tf_x + sfld.Len + 1
+                        sb.AppendLine($"            ' Format hint for {EscapeString(fieldDescr)}: {EscapeString(hint)}")
+                        sb.AppendLine($"            Dim {hintVar} As New Label()")
+                        sb.AppendLine($"            {hintVar}.Text  = ""{EscapeString(hint)}""")
+                        sb.AppendLine($"            {hintVar}.X     = TPos.Absolute({hintX})")
+                        sb.AppendLine($"            {hintVar}.Y     = TPos.Absolute({tf_y})")
+                        sb.AppendLine($"            {hintVar}.Width = TDim.Absolute({hint.Length})")
+                        sb.AppendLine($"            {hintVar}.SetScheme(New Scheme With {{")
+                        sb.AppendLine($"                .Normal    = ColorHelper.MakeAttr(""DarkGray"", ""{EscapeString(nbg)}""),")
+                        sb.AppendLine($"                .Focus     = ColorHelper.MakeAttr(""DarkGray"", ""{EscapeString(nbg)}""),")
+                        sb.AppendLine($"                .Editable  = ColorHelper.MakeAttr(""DarkGray"", ""{EscapeString(nbg)}""),")
+                        sb.AppendLine($"                .HotNormal = ColorHelper.MakeAttr(""DarkGray"", ""{EscapeString(nbg)}""),")
+                        sb.AppendLine($"                .HotFocus  = ColorHelper.MakeAttr(""DarkGray"", ""{EscapeString(nbg)}"")")
+                        sb.AppendLine($"            }})")
+                        sb.AppendLine($"            Me.Add({hintVar})")
+                    End If
 
                     ' Enforce max length — cancel the edit entirely when full to prevent Terminal.Gui
                     ' from advancing its internal ScrollOffset (which would shift text left).

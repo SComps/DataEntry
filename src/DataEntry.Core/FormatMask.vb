@@ -67,6 +67,40 @@ Imports System.Collections.Generic
         End Function
 
         ''' <summary>
+        ''' Derives a human-readable format hint from a mask token list.
+        ''' Only returned when the mask contains at least one Literal token — pure
+        ''' alpha/digit masks are self-explanatory from context.
+        ''' <para>
+        ''' Placeholder characters shown in the hint:
+        '''   9 / Z  →  #   (digit position)
+        '''   X      →  @   (any character)
+        '''   U / L  →  ^   (letter, forced case)
+        '''   Literal → the literal character itself
+        ''' </para>
+        ''' Returns an empty string when no hint is warranted.
+        ''' </summary>
+        Public Function FormatHint(tokens As List(Of MaskToken)) As String
+            ' Only emit a hint when there is at least one embedded literal
+            Dim hasLiteral = tokens.Exists(Function(t) t.Kind = MaskToken.TokenKind.Literal)
+            If Not hasLiteral Then Return ""
+
+            Dim sb As New System.Text.StringBuilder
+            For Each tok In tokens
+                Select Case tok.Kind
+                    Case MaskToken.TokenKind.Digit, MaskToken.TokenKind.ZeroFill
+                        sb.Append("#"c)
+                    Case MaskToken.TokenKind.Alphanumeric
+                        sb.Append("@"c)
+                    Case MaskToken.TokenKind.UpperCase, MaskToken.TokenKind.LowerCase
+                        sb.Append("^"c)
+                    Case MaskToken.TokenKind.Literal
+                        sb.Append(tok.LiteralChar)
+                End Select
+            Next
+            Return sb.ToString()
+        End Function
+
+        ''' <summary>
         ''' Returns True when every data-placeholder token in <paramref name="tokens"/> is
         ''' a digit (9) or zero-fill (Z) — i.e. the field holds a pure number.
         ''' Literal tokens are ignored for this classification.

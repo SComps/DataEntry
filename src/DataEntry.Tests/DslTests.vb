@@ -532,6 +532,58 @@ Namespace DataEntry.Tests
     End Class
 
     ' ─────────────────────────────────────────────────────────────────────────
+    ' FormatHintTests — verify the auto-generated display hint strings
+    ' ─────────────────────────────────────────────────────────────────────────
+    Public Class FormatHintTests
+
+        Private Shared Function Hint(maskRaw As String) As String
+            Return FormatMask.FormatHint(DslParser.ParseFormatMask(maskRaw))
+        End Function
+
+        <Fact>
+        Public Sub Phone_EscapedHyphens_ProducesReadableHint()
+            ' 999\-999\-9999 → ###-###-####
+            Assert.Equal("###-###-####", Hint("999\-999\-9999"))
+        End Sub
+
+        <Fact>
+        Public Sub Date_EscapedSlashes_ProducesReadableHint()
+            ' 99\/99\/9999 → ##/##/####
+            Assert.Equal("##/##/####", Hint("99\/99\/9999"))
+        End Sub
+
+        <Fact>
+        Public Sub Decimal_UnescapedDot_ProducesHint()
+            ' ZZ.99 — the dot is an unescaped literal → ##.##
+            Assert.Equal("##.##", Hint("ZZ.99"))
+        End Sub
+
+        <Fact>
+        Public Sub PureDigits_NoLiteral_ReturnsEmpty()
+            ' 999999 — no literals, hint not needed
+            Assert.Equal("", Hint("999999"))
+        End Sub
+
+        <Fact>
+        Public Sub PureAlpha_NoLiteral_ReturnsEmpty()
+            ' XXXXXXXXX — no literals
+            Assert.Equal("", Hint("XXXXXXXXX"))
+        End Sub
+
+        <Fact>
+        Public Sub UpperCase_NoLiteral_ReturnsEmpty()
+            Assert.Equal("", Hint("UU"))
+        End Sub
+
+        <Fact>
+        Public Sub Mixed_UpperWithLiteral_ProducesHint()
+            ' UU\/UU → ^^/^^
+            Assert.Equal("^^/^^", Hint("UU\/UU"))
+        End Sub
+
+    End Class
+
+    ' ─────────────────────────────────────────────────────────────────────────
     ' ApplyMaskTests — verify that FormatMask.ApplyMask produces the correct
     ' fixed-length record field value for a given raw input and FORMAT mask.
     ' These tests directly exercise the same logic that ends up in the

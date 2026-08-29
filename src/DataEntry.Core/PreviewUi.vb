@@ -62,7 +62,7 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
             win.Add(menuBar)
 
             If scr IsNot Nothing Then
-                BuildFields(win, scr)
+                BuildFields(win, scr, _doc)
             End If
 
             AddHandler win.KeyDown, AddressOf OnKeyDown
@@ -72,7 +72,7 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
 
         Private _allFields As New List(Of TextField)
 
-        Private Sub BuildFields(win As Window, scr As ScreenSection)
+        Private Sub BuildFields(win As Window, scr As ScreenSection, doc As DslDocument)
             _allFields.Clear()
 
             ' Render standalone PROMPT/LABEL elements
@@ -190,6 +190,31 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
                 End If
 
                 win.Add(tf)
+
+                ' Auto format hint — shown to the right of the field in muted colour when the
+                ' mask contains embedded literals (e.g. ###-###-#### for a phone mask).
+                ' Look up the format tokens from the RECORD field definition.
+                Dim hintTokens As New List(Of MaskToken)
+                For Each r In doc.Data.Records
+                    If String.Equals(r.Name, sfld.IntoRecord, StringComparison.OrdinalIgnoreCase) Then
+                        For Each f In r.Fields
+                            If String.Equals(f.Name, sfld.IntoField, StringComparison.OrdinalIgnoreCase) Then
+                                hintTokens = f.Format.Tokens
+                            End If
+                        Next
+                    End If
+                Next
+                Dim hint = FormatMask.FormatHint(hintTokens)
+                If hint.Length > 0 Then
+                    Dim hintLbl As New Label()
+                    hintLbl.Text  = hint
+                    hintLbl.X     = TPos.Absolute(tf_x + sfld.Len + 1)
+                    hintLbl.Y     = TPos.Absolute(tf_y)
+                    hintLbl.Width = TDim.Absolute(hint.Length)
+                    hintLbl.SetScheme(ColorHelper.MakeScreenScheme(
+                        New ColorSpec With {.Fg = "DarkGray", .Bg = scr.DefaultColor.Bg}))
+                    win.Add(hintLbl)
+                End If
             Next
         End Sub
 

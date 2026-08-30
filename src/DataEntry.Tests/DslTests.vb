@@ -672,15 +672,16 @@ Namespace DataEntry.Tests
 
         <Fact>
         Public Sub Digits_Short_SpacePadsWithSpaces()
-            ' 9 placeholder: missing input char → space; result left-justified because
-            ' trailing spaces make it look non-numeric for padding — but length already = LEN
-            Assert.Equal("42   ", Apply("42", "99999", 5))
+            ' 9 placeholder: missing input char → space; right-justified numeric padding
+            Assert.Equal("   42", Apply("42", "99999", 5))
         End Sub
 
         <Fact>
         Public Sub ZeroFill_ShortInput_ZeroFillsMissingPositions()
-            ' Z placeholder: missing input char → '0'; result length = LEN, no pad step fires
-            Assert.Equal("700", Apply("7", "ZZZ", 3))
+            ' Z placeholder: missing input char → '0'; right-justified zero-fill
+            Assert.Equal("007", Apply("7", "ZZZ", 3))
+            Assert.Equal("042", Apply("42", "ZZZ", 3))
+            Assert.Equal("0015", Apply("15", "ZZZZ", 4))
         End Sub
 
         <Fact>
@@ -692,8 +693,10 @@ Namespace DataEntry.Tests
         <Fact>
         Public Sub ZeroFill_WithDecimalLiteral_CorrectOutput()
             ' FORMAT=ZZ.99.  LEN=5  (hours.minutes, e.g. 08.50)
-            ' Input: "850" → Z='8', Z='5', .='.', 9=raw(2)='0', 9=missing→' ' → "85.0 "
-            Assert.Equal("85.0 ", Apply("850", "ZZ.99", 5))
+            Assert.Equal("08.50", Apply("8.50", "ZZ.99", 5))
+            Assert.Equal("08.50", Apply("8.5", "ZZ.99", 5))
+            Assert.Equal("10.00", Apply("10", "ZZ.99", 5))
+            Assert.Equal("051.00", Apply("51", "ZZZ.99", 6))
         End Sub
 
         <Fact>
@@ -795,6 +798,41 @@ Namespace DataEntry.Tests
 
             Dim output = FormatMask.ApplyMask("12252025", fld.Format.Tokens, fld.Len)
             Assert.Equal("12/25/2025", output)
+        End Sub
+
+        <Fact>
+        Public Sub TimesheetDef_TotalsAndHours_Formatting()
+            Dim src = LoadSample("timesheet.def")
+            Dim result = ParseDsl(src)
+            Dim monFld = result.Doc.Data.Records(0).Fields.Find(Function(f) f.Name = "MON")
+            Dim totalsFld = result.Doc.Data.Records(0).Fields.Find(Function(f) f.Name = "TOTALS")
+            Assert.NotNull(monFld)
+            Assert.NotNull(totalsFld)
+
+            ' Daily hours input: 10 -> "10.00", 8.5 -> "08.50"
+            Assert.Equal("10.00", FormatMask.ApplyMask("10", monFld.Format.Tokens, monFld.Len))
+            Assert.Equal("08.50", FormatMask.ApplyMask("8.5", monFld.Format.Tokens, monFld.Len))
+            Assert.Equal("00.00", FormatMask.ApplyMask("0", monFld.Format.Tokens, monFld.Len))
+
+            ' Auto-calculated totals: 51 -> "051.00", 51.5 -> "051.50"
+            Assert.Equal("051.00", FormatMask.ApplyMask("51", totalsFld.Format.Tokens, totalsFld.Len))
+            Assert.Equal("051.50", FormatMask.ApplyMask("51.5", totalsFld.Format.Tokens, totalsFld.Len))
+        End Sub
+
+        <Fact>
+        Public Sub InventoryDef_PriceAndReorder_Formatting()
+            Dim src = LoadSample("inventory.def")
+            Dim result = ParseDsl(src)
+            Dim qtyFld = result.Doc.Data.Records(0).Fields.Find(Function(f) f.Name = "QTY")
+            Dim priceFld = result.Doc.Data.Records(0).Fields.Find(Function(f) f.Name = "PRICE")
+            Dim reorderFld = result.Doc.Data.Records(0).Fields.Find(Function(f) f.Name = "REORDER")
+            Assert.NotNull(qtyFld)
+            Assert.NotNull(priceFld)
+            Assert.NotNull(reorderFld)
+
+            Assert.Equal("000025", FormatMask.ApplyMask("25", qtyFld.Format.Tokens, qtyFld.Len))
+            Assert.Equal("000019.99", FormatMask.ApplyMask("19.99", priceFld.Format.Tokens, priceFld.Len))
+            Assert.Equal("000002", FormatMask.ApplyMask("2.5", reorderFld.Format.Tokens, reorderFld.Len))
         End Sub
 
     End Class
@@ -2067,7 +2105,7 @@ Namespace DataEntry.Tests
                 Assert.Contains("v.Visible = True", showScreenBody)
                 Assert.Contains("v.Visible = False", showScreenBody)
                 Assert.Contains("_allFields.Clear()", showScreenBody)
-                Assert.Contains("Me.SetNeedsDisplay()", showScreenBody)
+                Assert.Contains("Me.SetNeedsDraw()", showScreenBody)
             Finally
                 If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
             End Try

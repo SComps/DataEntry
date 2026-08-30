@@ -17,6 +17,11 @@
     <ProjectReference Include="..\DataEntry.Core\DataEntry.Core.vbproj" />
   </ItemGroup>
 
+  <!-- Exclude generated sample projects inside Samples directory -->
+  <ItemGroup>
+    <Compile Remove="Samples\**\*.vb" />
+  </ItemGroup>
+
   <!-- Sample .def files copied to the build output directory so tests read from disk. -->
   <ItemGroup>
     <None Include="Samples\*.def" CopyToOutputDirectory="PreserveNewest" />

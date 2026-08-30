@@ -35,47 +35,194 @@ Imports System.Collections.Generic
                 Return raw
             End If
 
+            ' Decimal numeric mask (e.g. ZZ.99, ZZZ.99, ZZZZZZ.99, 999.99)
+            Dim dotIndexInTokens = -1
+            Dim isDecimalNumeric = False
+            If IsNumericMask(tokens) Then
+                Dim dotCount = 0
+                Dim otherLiteralCount = 0
+                For i = 0 To tokens.Count - 1
+                    If tokens(i).Kind = MaskToken.TokenKind.Literal Then
+                        If tokens(i).LiteralChar = "."c Then
+                            dotCount += 1
+                            dotIndexInTokens = i
+                        Else
+                            otherLiteralCount += 1
+                        End If
+                    End If
+                Next
+                If dotCount = 1 AndAlso otherLiteralCount = 0 AndAlso dotIndexInTokens > 0 AndAlso dotIndexInTokens < tokens.Count - 1 Then
+                    isDecimalNumeric = True
+                End If
+            End If
+
+            If isDecimalNumeric Then
+                Return ApplyDecimalNumericMask(raw, tokens, dotIndexInTokens, fieldLen)
+            End If
+
+            ' Pure integer numeric mask with no literals (e.g. 9999, ZZZZ, 999999, ZZZZZZ)
+            Dim isPureIntegerNumeric = IsNumericMask(tokens) AndAlso Not tokens.Exists(Function(t) t.Kind = MaskToken.TokenKind.Literal)
+            If isPureIntegerNumeric Then
+                Return ApplyPureIntegerMask(raw, tokens, fieldLen)
+            End If
+
+            ' General pattern / alphanumeric mask (e.g. 999\-999\-9999, 99\/99\/9999, XXXXX, UUUUU, LLLLL)
+            Return ApplyGeneralMask(raw, tokens, fieldLen)
+        End Function
+
+        Private Function ApplyDecimalNumericMask(raw As String,
+                                                 tokens As List(Of MaskToken),
+                                                 dotIndexInTokens As Integer,
+                                                 fieldLen As Integer) As String
+            Dim intTokens = tokens.GetRange(0, dotIndexInTokens)
+            Dim fracTokens = tokens.GetRange(dotIndexInTokens + 1, tokens.Count - dotIndexInTokens - 1)
+
+            Dim rawTrim = If(raw, "").Trim()
+            Dim rawInt As String = ""
+            Dim rawFrac As String = ""
+
+            If rawTrim.Contains("."c) Then
+                Dim dIdx = rawTrim.IndexOf("."c)
+                rawInt = rawTrim.Substring(0, dIdx)
+                rawFrac = rawTrim.Substring(dIdx + 1)
+            ElseIf rawTrim.Length > 0 Then
+                Dim totalDigits = intTokens.Count + fracTokens.Count
+                If rawTrim.Length = totalDigits Then
+                    rawInt = rawTrim.Substring(0, intTokens.Count)
+                    rawFrac = rawTrim.Substring(intTokens.Count)
+                Else
+                    rawInt = rawTrim
+                    rawFrac = ""
+                End If
+            End If
+
+            Dim intLen = intTokens.Count
+            Dim rawIntLen = rawInt.Length
+            Dim sbInt As New StringBuilder
+            For i = 0 To intLen - 1
+                If i < intLen - rawIntLen Then
+                    If intTokens(i).Kind = MaskToken.TokenKind.ZeroFill Then
+                        sbInt.Append("0"c)
+                    Else
+                        sbInt.Append(" "c)
+                    End If
+                Else
+                    Dim ch = rawInt(i - (intLen - rawIntLen))
+                    If Char.IsDigit(ch) Then
+                        sbInt.Append(ch)
+                    ElseIf intTokens(i).Kind = MaskToken.TokenKind.ZeroFill Then
+                        sbInt.Append("0"c)
+                    Else
+                        sbInt.Append(" "c)
+                    End If
+                End If
+            Next
+
+            Dim fracLen = fracTokens.Count
+            Dim rawFracLen = rawFrac.Length
+            Dim sbFrac As New StringBuilder
+            For i = 0 To fracLen - 1
+                If i < rawFracLen AndAlso Char.IsDigit(rawFrac(i)) Then
+                    sbFrac.Append(rawFrac(i))
+                Else
+                    sbFrac.Append("0"c)
+                End If
+            Next
+
+            Dim result = sbInt.ToString() & "." & sbFrac.ToString()
+            If result.Length < fieldLen Then
+                result = result.PadLeft(fieldLen)
+            ElseIf result.Length > fieldLen Then
+                result = result.Substring(0, fieldLen)
+            End If
+            Return result
+        End Function
+
+        Private Function ApplyPureIntegerMask(raw As String,
+                                              tokens As List(Of MaskToken),
+                                              fieldLen As Integer) As String
+            Dim rawTrim = If(raw, "").Trim()
+            If rawTrim.Contains("."c) Then
+                rawTrim = rawTrim.Substring(0, rawTrim.IndexOf("."c))
+            End If
+            Dim numTokens = tokens.Count
+            Dim rawLen = rawTrim.Length
+
             Dim sb As New StringBuilder
-            Dim ri = 0   ' index into raw input
+            For i = 0 To numTokens - 1
+                If i < numTokens - rawLen Then
+                    If tokens(i).Kind = MaskToken.TokenKind.ZeroFill Then
+                        sb.Append("0"c)
+                    Else
+                        sb.Append(" "c)
+                    End If
+                Else
+                    Dim ch = rawTrim(i - (numTokens - rawLen))
+                    If Char.IsDigit(ch) Then
+                        sb.Append(ch)
+                    ElseIf tokens(i).Kind = MaskToken.TokenKind.ZeroFill Then
+                        sb.Append("0"c)
+                    Else
+                        sb.Append(" "c)
+                    End If
+                End If
+            Next
 
-            ' Normalise pre-formatted input: strip separator/punctuation characters that
-            ' cannot be accepted by the mask's placeholder types.  This means both
-            ' "800-867-5309" and "(800)867-5309" collapse to raw digits before the mask runs.
-            raw = StripLiterals(raw, tokens)
+            Dim result = sb.ToString()
+            If result.Length < fieldLen Then
+                result = result.PadLeft(fieldLen)
+            ElseIf result.Length > fieldLen Then
+                result = result.Substring(0, fieldLen)
+            End If
+            Return result
+        End Function
 
+        Private Function ApplyGeneralMask(raw As String,
+                                          tokens As List(Of MaskToken),
+                                          fieldLen As Integer) As String
+            Dim rawClean = StripLiterals(If(raw, ""), tokens)
+            Dim sb As New StringBuilder
+            Dim ri = 0
             For Each tok In tokens
                 Select Case tok.Kind
                     Case MaskToken.TokenKind.Alphanumeric
-                        sb.Append(If(ri < raw.Length, raw(ri), " "c))
+                        sb.Append(If(ri < rawClean.Length, rawClean(ri), " "c))
                         ri += 1
                     Case MaskToken.TokenKind.UpperCase
-                        sb.Append(If(ri < raw.Length, Char.ToUpperInvariant(raw(ri)), " "c))
+                        sb.Append(If(ri < rawClean.Length, Char.ToUpperInvariant(rawClean(ri)), " "c))
                         ri += 1
                     Case MaskToken.TokenKind.LowerCase
-                        sb.Append(If(ri < raw.Length, Char.ToLowerInvariant(raw(ri)), " "c))
+                        sb.Append(If(ri < rawClean.Length, Char.ToLowerInvariant(rawClean(ri)), " "c))
                         ri += 1
                     Case MaskToken.TokenKind.Digit
-                        Dim dc = If(ri < raw.Length, raw(ri), " "c)
+                        Dim dc = If(ri < rawClean.Length, rawClean(ri), " "c)
                         sb.Append(If(Char.IsDigit(dc), dc, " "c))
                         ri += 1
                     Case MaskToken.TokenKind.ZeroFill
-                        Dim dc = If(ri < raw.Length, raw(ri), "0"c)
+                        Dim dc = If(ri < rawClean.Length, rawClean(ri), "0"c)
                         sb.Append(If(Char.IsDigit(dc), dc, "0"c))
                         ri += 1
                     Case MaskToken.TokenKind.Literal
-                        sb.Append(tok.LiteralChar)   ' never consumes raw input
+                        sb.Append(tok.LiteralChar)
                 End Select
             Next
 
             Dim result = sb.ToString()
             If result.Length < fieldLen Then
-                result = If(IsNumericMask(tokens),
-                            result.PadLeft(fieldLen),
-                            result.PadRight(fieldLen))
+                result = If(IsNumericMask(tokens), result.PadLeft(fieldLen), result.PadRight(fieldLen))
             ElseIf result.Length > fieldLen Then
                 result = result.Substring(0, fieldLen)
             End If
             Return result
+        End Function
+
+        Private Function StripNonDigits(s As String) As String
+            If String.IsNullOrEmpty(s) Then Return ""
+            Dim sb As New StringBuilder(s.Length)
+            For Each ch In s
+                If Char.IsDigit(ch) Then sb.Append(ch)
+            Next
+            Return sb.ToString()
         End Function
 
         ''' <summary>
@@ -134,9 +281,9 @@ Imports System.Collections.Generic
 
             Dim hasAlphanumeric = tokens.Exists(Function(t) t.Kind = MaskToken.TokenKind.Alphanumeric)
             Dim hasLetter       = tokens.Exists(Function(t) t.Kind = MaskToken.TokenKind.UpperCase OrElse
-                                                              t.Kind = MaskToken.TokenKind.LowerCase)
+                                                                  t.Kind = MaskToken.TokenKind.LowerCase)
             Dim hasDigit        = tokens.Exists(Function(t) t.Kind = MaskToken.TokenKind.Digit OrElse
-                                                              t.Kind = MaskToken.TokenKind.ZeroFill)
+                                                                  t.Kind = MaskToken.TokenKind.ZeroFill)
 
             Dim sb As New StringBuilder(raw.Length)
             For Each ch In raw

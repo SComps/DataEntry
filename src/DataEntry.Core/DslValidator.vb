@@ -27,6 +27,7 @@ Imports System.Collections.Generic
             _errors.Clear()
             CheckDataSection()
             CheckScreenSections()
+            CheckValidateSection()
             Return _errors
         End Function
 
@@ -67,7 +68,10 @@ Imports System.Collections.Generic
         Private Sub CheckRecord(rec As RecordDef, lrecl As Integer)
             ' Duplicate field names
             Dim fieldNames As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
-            Dim pos = 1   ' current byte position for implicit start tracking
+            Dim pos = 1   ' current byte position for implicit start tracking (1-based)
+            ' Track occupied byte ranges [startPos, endPos] for overlap detection.
+            ' Each entry is a (start, last) tuple stored as two-element Integer arrays.
+            Dim occupied As New List(Of Integer())
 
             For Each fld In rec.Fields
                 If Not fieldNames.Add(fld.Name) Then
@@ -79,15 +83,40 @@ Imports System.Collections.Generic
                     Continue For
                 End If
 
-                ' Resolve start position
-                Dim startPos = If(fld.Start > 0, fld.Start, pos)
+                ' Reject START=0 or any negative value — column numbers are 1-based;
+                ' column 0 does not exist (cards and mainframe records start at column 1).
+                If fld.Start = 0 OrElse fld.Start < -1 Then
+                    AddError(fld.Line, 0,
+                        $"Field '{fld.Name}' in record '{rec.Name}': START={fld.Start} is invalid. " &
+                        $"Column numbers are 1-based; the first column is START=1.")
+                    Continue For
+                End If
 
-                ' Check boundary
-                If startPos + fld.Len - 1 > lrecl Then
+                ' Resolve start position: explicit START= or implicit next-available column.
+                Dim startPos = If(fld.Start > 0, fld.Start, pos)
+                Dim endPos = startPos + fld.Len - 1
+
+                ' Store resolved 1-based position on the field for downstream consumers.
+                fld.ResolvedStart = startPos
+
+                ' Check LRECL boundary.
+                If endPos > lrecl Then
                     AddError(fld.Line, 0,
                         $"Field '{fld.Name}' in record '{rec.Name}' " &
                         $"(START={startPos} LEN={fld.Len}) exceeds LRECL={lrecl}.")
                 End If
+
+                ' Check for overlap with any already-laid-out field.
+                For Each span In occupied
+                    If startPos <= span(1) AndAlso endPos >= span(0) Then
+                        AddError(fld.Line, 0,
+                            $"Field '{fld.Name}' in record '{rec.Name}' " &
+                            $"(START={startPos} LEN={fld.Len}) overlaps a previously defined field " &
+                            $"(columns {span(0)}–{span(1)}).")
+                        Exit For
+                    End If
+                Next
+                occupied.Add(New Integer() {startPos, endPos})
 
                 ' Check FORMAT mask length vs LEN.
                 ' Mask longer than LEN will corrupt adjacent record data — hard Error.
@@ -105,11 +134,8 @@ Imports System.Collections.Generic
                     End If
                 End If
 
-                ' Implicit position tracking: when START is omitted, place this field
-                ' immediately after the previous field (or after the last explicitly-
-                ' positioned field if the previous field had an explicit START).
-                ' This mirrors COBOL sequential field layout.
-                pos = startPos + fld.Len   ' advance implicit cursor
+                ' Advance implicit cursor to the next available column.
+                pos = endPos + 1
             Next
         End Sub
 
@@ -178,11 +204,16 @@ Imports System.Collections.Generic
                         End If
                     End If
 
-                    ' VALIDATE WITH — warn only, the function is user-supplied
+                    ' VALIDATE WITH — warn only if no matching block in VALIDATE-SECTION;
+                    ' if a block is defined there the logic is compiled in and no stub is needed.
                     If Not String.IsNullOrEmpty(sfld.ValidateFunc) Then
-                        AddWarning(sfld.Line, 0,
-                            $"VALIDATE WITH '{sfld.ValidateFunc}' — ensure this function is defined " &
-                            "in the generated code.")
+                        Dim hasBlock = _doc.ValidateBlocks.Exists(
+                            Function(b) String.Equals(b.Name, sfld.ValidateFunc, StringComparison.OrdinalIgnoreCase))
+                        If Not hasBlock Then
+                            AddWarning(sfld.Line, 0,
+                                $"VALIDATE WITH '{sfld.ValidateFunc}' — ensure this function is defined " &
+                                "in the generated code.")
+                        End If
                     End If
 
                     ' Color name validation
@@ -277,6 +308,61 @@ Imports System.Collections.Generic
             If String.IsNullOrEmpty(name) Then Return True  ' empty = use default
             Return ValidColors.Contains(name)
         End Function
+
+        ' ── VALIDATE-SECTION checks ───────────────────────────────────────────
+
+        Private Sub CheckValidateSection()
+            ' Build a flat list of all record field names for expression resolution.
+            Dim allFields As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+            For Each rec In _doc.Data.Records
+                For Each f In rec.Fields
+                    allFields.Add(f.Name)
+                Next
+            Next
+
+            Dim blockNames As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+            For Each blk In _doc.ValidateBlocks
+                ' Duplicate block names.
+                If Not blockNames.Add(blk.Name) Then
+                    AddError(blk.Line, 0, $"Duplicate VALIDATE block name '{blk.Name}'.")
+                End If
+
+                For Each rule In blk.Rules
+                    If rule.Kind = RuleKind.Assign Then
+                        ' Target field must be a known record field or VALUE.
+                        If Not String.Equals(rule.TargetField, "VALUE", StringComparison.OrdinalIgnoreCase) AndAlso
+                           Not allFields.Contains(rule.TargetField) Then
+                            AddError(rule.Line, 0,
+                                $"VALIDATE '{blk.Name}': target field '{rule.TargetField}' is not defined in any RECORD.")
+                        End If
+                        ' Field names in the expression must be known or VALUE.
+                        For Each tok In rule.Expression
+                            If tok.Kind = ExprToken.ExprTokenKind.FieldName AndAlso
+                               Not String.Equals(tok.Value, "VALUE", StringComparison.OrdinalIgnoreCase) AndAlso
+                               Not allFields.Contains(tok.Value) Then
+                                AddError(rule.Line, 0,
+                                    $"VALIDATE '{blk.Name}': expression references unknown field '{tok.Value}'.")
+                            End If
+                        Next
+
+                        ' Warn if the target field appears on a screen without PROTECTED.
+                        ' A user could overwrite a calculated value if the field is editable.
+                        If Not String.Equals(rule.TargetField, "VALUE", StringComparison.OrdinalIgnoreCase) Then
+                            For Each scr In _doc.Screens
+                                For Each sfld In scr.Fields
+                                    If String.Equals(sfld.IntoField, rule.TargetField, StringComparison.OrdinalIgnoreCase) AndAlso
+                                       Not sfld.IsProtected Then
+                                        AddWarning(rule.Line, 0,
+                                            $"VALIDATE '{blk.Name}': target field '{rule.TargetField}' is on the screen " &
+                                            $"but not declared PROTECTED — the user can overwrite the calculated value.")
+                                    End If
+                                Next
+                            Next
+                        End If
+                    End If
+                Next
+            Next
+        End Sub
 
         ' ── Helpers ───────────────────────────────────────────────────────────
 

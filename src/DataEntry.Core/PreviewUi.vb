@@ -81,7 +81,7 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
                 plbl.Text  = pr.Text
                 plbl.X     = TPos.Absolute(pr.Col - 1)
                 plbl.Y     = TPos.Absolute(pr.Row)
-                plbl.Width = TDim.Absolute(pr.Text.Length)
+                plbl.Width = TDim.Auto()
                 If pr.Color IsNot Nothing Then
                     plbl.SetScheme(ColorHelper.MakeScreenScheme(pr.Color))
                 End If
@@ -101,7 +101,7 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
                     lbl.Text  = sfld.Label & ":"
                     lbl.X     = TPos.Absolute(pCol - 1)
                     lbl.Y     = TPos.Absolute(pRow)
-                    lbl.Width = TDim.Absolute(sfld.Label.Length + 1)
+                    lbl.Width = TDim.Auto()
                     win.Add(lbl)
 
                     If sfld.PromptRow <> -1 AndAlso sfld.PromptCol <> -1 Then
@@ -210,7 +210,7 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
                     hintLbl.Text  = hint
                     hintLbl.X     = TPos.Absolute(tf_x + sfld.Len + 1)
                     hintLbl.Y     = TPos.Absolute(tf_y)
-                    hintLbl.Width = TDim.Absolute(hint.Length)
+                    hintLbl.Width = TDim.Auto()
                     hintLbl.SetScheme(ColorHelper.MakeScreenScheme(
                         New ColorSpec With {.Fg = "DarkGray", .Bg = scr.DefaultColor.Bg}))
                     win.Add(hintLbl)

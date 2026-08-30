@@ -64,6 +64,13 @@ Imports System.Collections.Generic
         Public Property Len As Integer = 0
         Public Property Format As FormatSpec = New FormatSpec()
         Public Property Line As Integer         ' source line for error reporting
+        ''' <summary>
+        ''' Resolved 1-based column position, set by DslValidator.
+        ''' Equals the explicit START= value when supplied, otherwise the
+        ''' implicit next-available column derived from the preceding field.
+        ''' Zero means the field has not been validated yet.
+        ''' </summary>
+        Public Property ResolvedStart As Integer = 0
     End Class
 
     ''' <summary>A RECORD block with its list of fields.</summary>
@@ -109,6 +116,11 @@ Imports System.Collections.Generic
         Public Property FocusColor As ColorSpec = Nothing
         Public Property ErrorColor As ColorSpec = Nothing
         Public Property Full As FullBehavior = FullBehavior.Advance  ' FULL= attribute
+        ''' <summary>
+        ''' When True the field is display-only — rendered read-only with no tab-stop.
+        ''' The user can see but not type into it (3270 protected field semantics).
+        ''' </summary>
+        Public Property IsProtected As Boolean = False
         Public Property Line As Integer
     End Class
 
@@ -121,11 +133,55 @@ Imports System.Collections.Generic
         Public Property Line As Integer
     End Class
 
+    ' ── Validate Section ─────────────────────────────────────────────────────
+
+    ''' <summary>The kind of a single rule inside a VALIDATE block.</summary>
+    Public Enum RuleKind
+        NotEmpty    ' NOT EMPTY
+        Between     ' VALUE IS BETWEEN n AND m
+        Assign      ' <target> IS <expr>  (arithmetic assignment / calculation)
+    End Enum
+
+    ''' <summary>One token in a flat arithmetic expression (operand or operator).</summary>
+    Public Class ExprToken
+        Public Enum ExprTokenKind
+            FieldName   ' a record field name or VALUE
+            Number      ' a numeric literal
+            Op          ' + - * /
+        End Enum
+        Public Property Kind As ExprTokenKind
+        Public Property Value As String = ""   ' field name, literal text, or operator char
+    End Class
+
+    ''' <summary>One rule statement inside a VALIDATE block.</summary>
+    Public Class ValidateRule
+        Public Property Kind As RuleKind
+        Public Property Message As String = ""          ' optional MESSAGE "text"
+
+        ' For Between: low and high bound as strings (parsed to Double at runtime).
+        Public Property LowBound As String = ""
+        Public Property HighBound As String = ""
+
+        ' For Assign: the target field name and the right-hand expression tokens.
+        Public Property TargetField As String = ""
+        Public Property Expression As New List(Of ExprToken)
+
+        Public Property Line As Integer
+    End Class
+
+    ''' <summary>A named VALIDATE block in the VALIDATE-SECTION.</summary>
+    Public Class ValidateBlock
+        Public Property Name As String = ""
+        Public Property Rules As New List(Of ValidateRule)
+        Public Property Line As Integer
+    End Class
+
     ' ── Top-level Document ───────────────────────────────────────────────────
 
     ''' <summary>The root of the parsed DSL document.</summary>
     Public Class DslDocument
         Public Property Data As DataSection = New DataSection()
         Public Property Screens As New List(Of ScreenSection)
+        Public Property ValidateBlocks As New List(Of ValidateBlock)
     End Class
 

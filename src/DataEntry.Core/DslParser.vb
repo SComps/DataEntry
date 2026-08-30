@@ -48,6 +48,11 @@ Imports System.Collections.Generic
                         SkipNewlines()
                     Loop
 
+                ElseIf tok.Type = TokenType.Keyword AndAlso tok.Value = "VALIDATE-SECTION" Then
+                    Consume()
+                    SkipNewlines()
+                    ParseValidateSection(doc)
+
                 Else
                     AddError($"Unexpected token '{tok.Value}' at top level.", tok)
                     Consume()
@@ -161,7 +166,8 @@ Imports System.Collections.Generic
             ' Fields: each starts with an identifier (field name)
             Dim lastField As FieldDef = Nothing
             Do While Not AtEof() AndAlso Not IsKeyword("RECORD") AndAlso
-                     Not IsKeyword("SCREEN-SECTION") AndAlso Not IsKeyword("DATA-SECTION")
+                     Not IsKeyword("SCREEN-SECTION") AndAlso Not IsKeyword("DATA-SECTION") AndAlso
+                     Not IsKeyword("VALIDATE-SECTION")
 
                 ' FORMAT= line (continuation of previous field)
                 If IsKeyword("FORMAT") Then
@@ -370,6 +376,9 @@ Imports System.Collections.Generic
                     Consume()
                     If IsKeyword("WITH") Then Consume()
                     fld.ValidateFunc = ConsumeIdentifier("validate function name")
+                ElseIf IsKeyword("PROTECTED") Then
+                    Consume()
+                    fld.IsProtected = True
                 Else
                     Exit Do
                 End If
@@ -559,6 +568,245 @@ Imports System.Collections.Generic
                 .Line = tok.Line, .Col = tok.Col,
                 .Message = msg, .Severity = severity
             })
+        End Sub
+
+        ' ── VALIDATE-SECTION ──────────────────────────────────────────────────
+
+        ''' <summary>Parse the VALIDATE-SECTION, adding blocks to doc.ValidateBlocks.</summary>
+        Private Sub ParseValidateSection(doc As DslDocument)
+            ' Consume VALIDATE <name> blocks until we hit another top-level keyword or EOF.
+            Do While IsKeyword("VALIDATE") AndAlso Not AtEof()
+                Dim blk = ParseValidateBlock()
+                If blk IsNot Nothing Then doc.ValidateBlocks.Add(blk)
+                SkipNewlines()
+            Loop
+        End Sub
+
+        ''' <summary>Parse a single VALIDATE &lt;name&gt; block and its rules.</summary>
+        Private Function ParseValidateBlock() As ValidateBlock
+            Dim tok = Current()
+            Consume()  ' consume VALIDATE keyword
+            Dim blk As New ValidateBlock With {.Line = tok.Line}
+            blk.Name = ConsumeIdentifier("VALIDATE block name")
+            SkipNewlines()
+
+            ' Parse rule lines until the next VALIDATE block, top-level keyword, or EOF.
+            Do While Not AtEof()
+                ' Stop at any top-level section keyword or another VALIDATE block header.
+                If IsTopLevelKeyword() Then Exit Do
+                If IsKeyword("VALIDATE") Then Exit Do
+
+                Dim rule = ParseValidateRule()
+                If rule IsNot Nothing Then blk.Rules.Add(rule)
+                SkipNewlines()
+            Loop
+
+            Return blk
+        End Function
+
+        ''' <summary>Parse one rule line inside a VALIDATE block.</summary>
+        Private Function ParseValidateRule() As ValidateRule
+            Dim tok = Current()
+
+            ' ── NOT EMPTY ────────────────────────────────────────────────────
+            If IsKeyword("NOT") Then
+                Consume()
+                If Not IsKeyword("EMPTY") Then
+                    AddError("Expected EMPTY after NOT in validate rule.", Current())
+                    SkipToNextLine()
+                    Return Nothing
+                End If
+                Consume()
+                Dim rule As New ValidateRule With {.Kind = RuleKind.NotEmpty, .Line = tok.Line}
+                rule.Message = TryConsumeMessage()
+                Return rule
+            End If
+
+            ' ── VALUE IS BETWEEN n AND m  ─────────────────────────────────
+            If IsKeyword("VALUE") Then
+                Consume()
+                If Not IsKeyword("IS") Then
+                    AddError("Expected IS after VALUE in validate rule.", Current())
+                    SkipToNextLine()
+                    Return Nothing
+                End If
+                Consume()
+                If Not IsKeyword("BETWEEN") Then
+                    AddError("Expected BETWEEN after VALUE IS.", Current())
+                    SkipToNextLine()
+                    Return Nothing
+                End If
+                Consume()
+                Dim lo = ConsumeNumericLiteral("BETWEEN low bound")
+                If Not IsKeyword("AND") Then
+                    AddError("Expected AND after BETWEEN low bound.", Current())
+                    SkipToNextLine()
+                    Return Nothing
+                End If
+                Consume()
+                Dim hi = ConsumeNumericLiteral("BETWEEN high bound")
+                Dim rule As New ValidateRule With {
+                    .Kind = RuleKind.Between,
+                    .LowBound = lo,
+                    .HighBound = hi,
+                    .Line = tok.Line
+                }
+                rule.Message = TryConsumeMessage()
+                Return rule
+            End If
+
+            ' ── <target> IS <expr>  ───────────────────────────────────────
+            ' An identifier followed by IS — assignment / calculation rule.
+            If tok.Type = TokenType.Identifier OrElse
+               (tok.Type = TokenType.Keyword AndAlso IsKnownFieldKeyword(tok.Value)) Then
+                Dim targetName = tok.Value
+                Consume()
+                If Not IsKeyword("IS") Then
+                    AddError($"Expected IS after field name '{targetName}' in validate rule.", Current())
+                    SkipToNextLine()
+                    Return Nothing
+                End If
+                Consume()
+                Dim expr = ParseFlatExpression()
+                If expr.Count = 0 Then
+                    AddError($"Expected expression after IS in validate rule for '{targetName}'.", Current())
+                    SkipToNextLine()
+                    Return Nothing
+                End If
+                Dim rule As New ValidateRule With {
+                    .Kind = RuleKind.Assign,
+                    .TargetField = targetName,
+                    .Line = tok.Line
+                }
+                rule.Expression.AddRange(expr)
+                rule.Message = TryConsumeMessage()
+                Return rule
+            End If
+
+            ' Unrecognised — emit error, skip line.
+            AddError($"Unrecognised validate rule starting with '{tok.Value}'.", tok)
+            SkipToNextLine()
+            Return Nothing
+        End Function
+
+        ''' <summary>
+        ''' Parse a flat arithmetic expression: alternating operands (field names or
+        ''' numeric literals) and operators (+ - * /), stopping at MESSAGE, newline, or EOF.
+        ''' </summary>
+        Private Function ParseFlatExpression() As List(Of ExprToken)
+            Dim tokens As New List(Of ExprToken)
+            Dim expectOperand = True
+
+            Do While Not AtLineEnd() AndAlso Not AtEof()
+                ' Stop when we hit the optional MESSAGE keyword.
+                If IsKeyword("MESSAGE") Then Exit Do
+
+                Dim t = Current()
+
+                If expectOperand Then
+                    ' Expect a field name (Identifier or VALUE keyword) or a number.
+                    If t.Type = TokenType.Number Then
+                        tokens.Add(New ExprToken With {
+                            .Kind = ExprToken.ExprTokenKind.Number,
+                            .Value = t.Value
+                        })
+                        Consume()
+                        expectOperand = False
+                    ElseIf t.Type = TokenType.Identifier OrElse
+                           (t.Type = TokenType.Keyword AndAlso
+                            (t.Value = "VALUE" OrElse IsKnownFieldKeyword(t.Value))) Then
+                        tokens.Add(New ExprToken With {
+                            .Kind = ExprToken.ExprTokenKind.FieldName,
+                            .Value = t.Value
+                        })
+                        Consume()
+                        expectOperand = False
+                    Else
+                        Exit Do   ' not an operand — stop
+                    End If
+                Else
+                    ' Expect an operator: + - * /
+                    If t.Type = TokenType.Identifier AndAlso
+                       (t.Value = "+" OrElse t.Value = "-" OrElse
+                        t.Value = "*" OrElse t.Value = "/") Then
+                        tokens.Add(New ExprToken With {
+                            .Kind = ExprToken.ExprTokenKind.Op,
+                            .Value = t.Value
+                        })
+                        Consume()
+                        expectOperand = True
+                    Else
+                        Exit Do   ' not an operator — stop
+                    End If
+                End If
+            Loop
+
+            Return tokens
+        End Function
+
+        ''' <summary>Consume an optional MESSAGE "text" clause on the current line.</summary>
+        Private Function TryConsumeMessage() As String
+            If IsKeyword("MESSAGE") Then
+                Consume()
+                Dim t = Current()
+                If t.Type = TokenType.StringLit Then
+                    Consume()
+                    Return t.Value
+                End If
+            End If
+            Return ""
+        End Function
+
+        ''' <summary>Consume a numeric literal (integer or decimal) as a string.</summary>
+        Private Function ConsumeNumericLiteral(what As String) As String
+            Dim t = Current()
+            If t.Type = TokenType.Number Then
+                Consume()
+                ' Allow optional decimal part: e.g. 0.5
+                If Not AtLineEnd() AndAlso Not AtEof() Then
+                    Dim dot = Current()
+                    If dot.Type = TokenType.Dot Then
+                        Consume()
+                        Dim frac = Current()
+                        If frac.Type = TokenType.Number Then
+                            Consume()
+                            Return t.Value & "." & frac.Value
+                        End If
+                        ' dot with no fraction — treat as end of number
+                    End If
+                End If
+                Return t.Value
+            End If
+            AddError($"Expected numeric literal for {what}, got '{t.Value}'.", t)
+            Return "0"
+        End Function
+
+        ''' <summary>
+        ''' Returns True if the current token is a top-level section keyword that
+        ''' signals the end of a VALIDATE block.
+        ''' </summary>
+        Private Function IsTopLevelKeyword() As Boolean
+            If AtEof() Then Return True
+            Dim v = Current().Value.ToUpperInvariant()
+            Return v = "DATA-SECTION" OrElse v = "SCREEN-SECTION" OrElse
+                   v = "VALIDATE-SECTION" OrElse v = "RECORD"
+        End Function
+
+        ''' <summary>
+        ''' Returns True for keywords that can legally appear as field names in
+        ''' expressions (e.g. field named RATE or HOURS which the lexer tokenises
+        ''' as Identifier, so this guard is mainly for VALUE).
+        ''' </summary>
+        Private Function IsKnownFieldKeyword(v As String) As Boolean
+            ' VALUE is the only keyword that doubles as an expression operand.
+            Return String.Equals(v, "VALUE", StringComparison.OrdinalIgnoreCase)
+        End Function
+
+        ''' <summary>Skip tokens until the next Newline or EOF (resilient error recovery).</summary>
+        Private Sub SkipToNextLine()
+            Do While Not AtEof() AndAlso Current().Type <> TokenType.Newline
+                Consume()
+            Loop
         End Sub
 
     End Class

@@ -362,6 +362,7 @@ Imports System.Collections.Generic
             sb.AppendLine("        Private _recordIndex As Integer = -1")
             sb.AppendLine("        Private _records As List(Of String)")
             sb.AppendLine("        Private _allFields As New List(Of TextField)")
+            sb.AppendLine("        Private _statusLabel As Label")
             sb.AppendLine()
             sb.AppendLine("        Public Sub New(app As IApplication)")
             sb.AppendLine("            _app = app")
@@ -404,7 +405,7 @@ Imports System.Collections.Generic
                     sb.AppendLine($"            {pVar}.Text  = ""{EscapeString(pr.Text)}""")
                     sb.AppendLine($"            {pVar}.X     = TPos.Absolute({pr.Col - 1})")
                     sb.AppendLine($"            {pVar}.Y     = TPos.Absolute({pr.Row})")
-                    sb.AppendLine($"            {pVar}.Width = TDim.Absolute({pr.Text.Length})")
+                    sb.AppendLine($"            {pVar}.Width = TDim.Auto()")
                     If pr.Color IsNot Nothing Then
                         sb.AppendLine($"            {pVar}.SetScheme(New Scheme With {{")
                         sb.AppendLine($"                .Normal    = ColorHelper.MakeAttr(""{pfg}"", ""{pbg}""),")
@@ -438,7 +439,7 @@ Imports System.Collections.Generic
                         sb.AppendLine($"            {lblVar}.Text  = ""{EscapeString(sfld.Label)}:""")
                         sb.AppendLine($"            {lblVar}.X     = TPos.Absolute({pCol - 1})")
                         sb.AppendLine($"            {lblVar}.Y     = TPos.Absolute({pRow})")
-                        sb.AppendLine($"            {lblVar}.Width = TDim.Absolute({sfld.Label.Length + 1})")
+                        sb.AppendLine($"            {lblVar}.Width = TDim.Auto()")
                         sb.AppendLine($"            Me.Add({lblVar})")
 
                         If sfld.PromptRow <> -1 AndAlso sfld.PromptCol <> -1 Then
@@ -478,8 +479,13 @@ Imports System.Collections.Generic
                     sb.AppendLine($"                .HotFocus  = ColorHelper.MakeAttr(""{ffg}"", ""{fbg}"")")
                     sb.AppendLine($"            }})")
                     sb.AppendLine($"            Me.Add({vn})")
-                    sb.AppendLine($"            _allFields.Add({vn})")
-                    sb.AppendLine($"            AddHandler {vn}.KeyDown, AddressOf OnKeyDown")
+                    If sfld.IsProtected Then
+                        sb.AppendLine($"            {vn}.ReadOnly = True")
+                        sb.AppendLine($"            {vn}.TabStop  = False")
+                    Else
+                        sb.AppendLine($"            _allFields.Add({vn})")
+                        sb.AppendLine($"            AddHandler {vn}.KeyDown, AddressOf OnKeyDown")
+                    End If
 
                     ' Emit a muted hint label to the right of the field when the mask has embedded literals
                     If hint.Length > 0 Then
@@ -490,7 +496,7 @@ Imports System.Collections.Generic
                         sb.AppendLine($"            {hintVar}.Text  = ""{EscapeString(hint)}""")
                         sb.AppendLine($"            {hintVar}.X     = TPos.Absolute({hintX})")
                         sb.AppendLine($"            {hintVar}.Y     = TPos.Absolute({tf_y})")
-                        sb.AppendLine($"            {hintVar}.Width = TDim.Absolute({hint.Length})")
+                        sb.AppendLine($"            {hintVar}.Width = TDim.Auto()")
                         sb.AppendLine($"            {hintVar}.SetScheme(New Scheme With {{")
                         sb.AppendLine($"                .Normal    = ColorHelper.MakeAttr(""DarkGray"", ""{EscapeString(nbg)}""),")
                         sb.AppendLine($"                .Focus     = ColorHelper.MakeAttr(""DarkGray"", ""{EscapeString(nbg)}""),")
@@ -501,6 +507,7 @@ Imports System.Collections.Generic
                         sb.AppendLine($"            Me.Add({hintVar})")
                     End If
 
+                    If Not sfld.IsProtected Then
                     ' Enforce max length — cancel the edit entirely when full to prevent Terminal.Gui
                     ' from advancing its internal ScrollOffset (which would shift text left).
                     sb.AppendLine($"            AddHandler {vn}.TextChanging, Sub(sender As Object, ev As ResultEventArgs(Of String))")
@@ -558,31 +565,135 @@ Imports System.Collections.Generic
                         sb.AppendLine($"                    ev.Handled = True")
                         sb.AppendLine($"                End If")
                         sb.AppendLine($"            End Sub")
-                    End If
+                    End If  ' Full behaviour
+
+                    ' Validation Leave handler — fires when user leaves this field.
+                    If Not String.IsNullOrEmpty(sfld.ValidateFunc) Then
+                        ' Determine if this block needs the fields dictionary (cross-field Assign rule).
+                        Dim blk As ValidateBlock = Nothing
+                        For Each vblk In doc.ValidateBlocks
+                            If String.Equals(vblk.Name, sfld.ValidateFunc, StringComparison.OrdinalIgnoreCase) Then
+                                blk = vblk
+                                Exit For
+                            End If
+                        Next
+                        Dim needsFields = blk IsNot Nothing AndAlso
+                            blk.Rules.Exists(Function(r) r.Kind = RuleKind.Assign AndAlso
+                                r.Expression.Exists(Function(t) t.Kind = ExprToken.ExprTokenKind.FieldName AndAlso
+                                    Not String.Equals(t.Value, "VALUE", StringComparison.OrdinalIgnoreCase)))
+
+                        Dim safeFn = MakeSafeName(sfld.ValidateFunc)
+                        Dim efg = If(sfld.ErrorColor IsNot Nothing, sfld.ErrorColor.Fg, "White")
+                        Dim ebg = If(sfld.ErrorColor IsNot Nothing, sfld.ErrorColor.Bg, "DarkRed")
+                        Dim nfg2 = If(sfld.NormalColor IsNot Nothing, sfld.NormalColor.Fg, scr.DefaultColor.Fg)
+                        Dim nbg2 = If(sfld.NormalColor IsNot Nothing, sfld.NormalColor.Bg, scr.DefaultColor.Bg)
+                        Dim ffg2 = If(sfld.FocusColor IsNot Nothing, sfld.FocusColor.Fg, "Black")
+                        Dim fbg2 = If(sfld.FocusColor IsNot Nothing, sfld.FocusColor.Bg, "Cyan")
+
+                        sb.AppendLine($"            AddHandler {vn}.Leave, Sub(sender As Object, ev As EventArgs)")
+                        sb.AppendLine($"                Dim fld = DirectCast(sender, TextField)")
+                        sb.AppendLine($"                Dim fieldVal = If(fld.Text, """")")
+
+                        If needsFields Then
+                            ' Build the fields dictionary from all named screen fields.
+                            sb.AppendLine($"                Dim fldMap As New Dictionary(Of String, String)(StringComparer.OrdinalIgnoreCase)")
+                            Dim di = 0
+                            For Each dscr In doc.Screens
+                                For Each dsfld In dscr.Fields
+                                    sb.AppendLine($"                fldMap(""{dsfld.IntoField}"") = If({fieldVars(di)}.Text, """")")
+                                    di += 1
+                                Next
+                            Next
+                            sb.AppendLine($"                Dim vResult As Object = ValidationFunctions.{safeFn}(fieldVal, fldMap)")
+                        Else
+                            sb.AppendLine($"                Dim vResult As Object = ValidationFunctions.{safeFn}(fieldVal)")
+                        End If
+
+                        sb.AppendLine($"                Dim vBool As Boolean")
+                        sb.AppendLine($"                Dim vStr As String = Nothing")
+                        sb.AppendLine($"                If TypeOf vResult Is Boolean Then")
+                        sb.AppendLine($"                    vBool = DirectCast(vResult, Boolean)")
+                        sb.AppendLine($"                ElseIf vResult IsNot Nothing Then")
+                        sb.AppendLine($"                    vStr = vResult.ToString()")
+                        sb.AppendLine($"                    vBool = True")
+                        sb.AppendLine($"                Else")
+                        sb.AppendLine($"                    vBool = True")
+                        sb.AppendLine($"                End If")
+                        sb.AppendLine($"                If Not vBool Then")
+                        sb.AppendLine($"                    ' Reject — show error colour and keep focus.")
+                        sb.AppendLine($"                    fld.SetScheme(New Scheme With {{")
+                        sb.AppendLine($"                        .Normal    = ColorHelper.MakeAttr(""{efg}"", ""{ebg}""),")
+                        sb.AppendLine($"                        .Focus     = ColorHelper.MakeAttr(""{efg}"", ""{ebg}""),")
+                        sb.AppendLine($"                        .Editable  = ColorHelper.MakeAttr(""{efg}"", ""{ebg}""),")
+                        sb.AppendLine($"                        .HotNormal = ColorHelper.MakeAttr(""{efg}"", ""{ebg}""),")
+                        sb.AppendLine($"                        .HotFocus  = ColorHelper.MakeAttr(""{efg}"", ""{ebg}"")")
+                        sb.AppendLine($"                    }})")
+                        sb.AppendLine($"                    If _statusLabel IsNot Nothing Then _statusLabel.Text = If(TypeOf vResult Is String, vResult.ToString(), ""Invalid value — please re-enter."")")
+                        sb.AppendLine($"                    ev.Handled = True")
+                        sb.AppendLine($"                    fld.SetFocus()")
+                        sb.AppendLine($"                ElseIf vStr IsNot Nothing Then")
+                        sb.AppendLine($"                    ' String result — replace field value.")
+                        sb.AppendLine($"                    fld.Text = vStr")
+                        sb.AppendLine($"                    fld.SetScheme(New Scheme With {{")
+                        sb.AppendLine($"                        .Normal    = ColorHelper.MakeAttr(""{nfg2}"", ""{nbg2}""),")
+                        sb.AppendLine($"                        .Focus     = ColorHelper.MakeAttr(""{ffg2}"", ""{fbg2}""),")
+                        sb.AppendLine($"                        .Editable  = ColorHelper.MakeAttr(""{ffg2}"", ""{fbg2}""),")
+                        sb.AppendLine($"                        .HotNormal = ColorHelper.MakeAttr(""{nfg2}"", ""{nbg2}""),")
+                        sb.AppendLine($"                        .HotFocus  = ColorHelper.MakeAttr(""{ffg2}"", ""{fbg2}"")")
+                        sb.AppendLine($"                    }})")
+                        sb.AppendLine($"                    If _statusLabel IsNot Nothing Then _statusLabel.Text = """"")
+                        sb.AppendLine($"                Else")
+                        sb.AppendLine($"                    ' True — restore normal colour, clear status.")
+                        sb.AppendLine($"                    fld.SetScheme(New Scheme With {{")
+                        sb.AppendLine($"                        .Normal    = ColorHelper.MakeAttr(""{nfg2}"", ""{nbg2}""),")
+                        sb.AppendLine($"                        .Focus     = ColorHelper.MakeAttr(""{ffg2}"", ""{fbg2}""),")
+                        sb.AppendLine($"                        .Editable  = ColorHelper.MakeAttr(""{ffg2}"", ""{fbg2}""),")
+                        sb.AppendLine($"                        .HotNormal = ColorHelper.MakeAttr(""{nfg2}"", ""{nbg2}""),")
+                        sb.AppendLine($"                        .HotFocus  = ColorHelper.MakeAttr(""{ffg2}"", ""{fbg2}"")")
+                        sb.AppendLine($"                    }})")
+                        sb.AppendLine($"                    If _statusLabel IsNot Nothing Then _statusLabel.Text = """"")
+                        sb.AppendLine($"                End If")
+                        sb.AppendLine($"            End Sub")
+                    End If  ' ValidateFunc
+
+                    End If  ' Not IsProtected
+
                     sb.AppendLine()
                 Next
             Next
+
+            ' Status label — shown at row 25 (below the 24-row screen area) for validation messages.
+            sb.AppendLine("            _statusLabel = New Label()")
+            sb.AppendLine("            _statusLabel.X     = TPos.Absolute(0)")
+            sb.AppendLine("            _statusLabel.Y     = TPos.Absolute(25)")
+            sb.AppendLine("            _statusLabel.Width = TDim.Fill()")
+            sb.AppendLine("            _statusLabel.Text  = """"")
+            sb.AppendLine("            Me.Add(_statusLabel)")
 
             sb.AppendLine("            AddHandler Me.KeyDown, AddressOf OnKeyDown")
             sb.AppendLine("        End Sub")
             sb.AppendLine()
 
-            ' Save handler — collects field values and writes a record
+            ' Save handler — collects field values and writes a record.
+            ' Uses a fixed-width char buffer pre-filled with spaces so that dead space
+            ' (gaps between fields with explicit START= positions) is preserved correctly.
             sb.AppendLine("        ' Collect all field values, format them, and write to the data file.")
             sb.AppendLine("        Private Sub SaveRecord()")
-            sb.AppendLine("            Dim rec As New System.Text.StringBuilder")
+            sb.AppendLine("            Dim buf(Lrecl - 1) As Char")
+            sb.AppendLine("            Array.Fill(buf, "" ""c)")
             varIdx = 0
             For Each scr In doc.Screens
                 For Each sfld In scr.Fields
                     Dim vn = fieldVars(varIdx) : varIdx += 1
-                    Dim maskRaw = sfld.ValidateFunc  ' use validate func name if set
                     Dim fmt = ""
-                    ' Find format from record field definition
+                    Dim fOffset = 0   ' 0-based buffer index (ResolvedStart - 1)
+                    ' Find format and resolved position from record field definition.
                     For Each r In doc.Data.Records
                         If String.Equals(r.Name, sfld.IntoRecord, StringComparison.OrdinalIgnoreCase) Then
                             For Each f In r.Fields
                                 If String.Equals(f.Name, sfld.IntoField, StringComparison.OrdinalIgnoreCase) Then
                                     fmt = f.Format.Raw
+                                    fOffset = f.ResolvedStart - 1   ' convert 1-based → 0-based
                                 End If
                             Next
                         End If
@@ -601,10 +712,10 @@ Imports System.Collections.Generic
                         End If
                     Loop
                     sb.AppendLine($"            ' {sfld.Label} → {sfld.IntoRecord}.{sfld.IntoField}")
-                    sb.AppendLine($"            rec.Append(FormatHelper.ApplyMask(If({vn}.Text, """"), ""{EscapeString(fmt)}"", {sfld.Len}, {isNum.ToString().ToLower()}))")
+                    sb.AppendLine($"            FormatHelper.ApplyMask(If({vn}.Text, """"), ""{EscapeString(fmt)}"", {sfld.Len}, {isNum.ToString().ToLower()}).CopyTo(0, buf, {fOffset}, {sfld.Len})")
                 Next
             Next
-            sb.AppendLine("            DataFile.SaveRecordAtIndex(_recordIndex, rec.ToString())")
+            sb.AppendLine("            DataFile.SaveRecordAtIndex(_recordIndex, New String(buf))")
             sb.AppendLine("            _recordIndex = -1   ' reset to new record after save")
             sb.AppendLine("        End Sub")
             sb.AppendLine()
@@ -639,10 +750,24 @@ Imports System.Collections.Generic
             sb.AppendLine("            ' Shift + PgUp/PgDn/Home/End = record navigation")
             sb.AppendLine("            If e.IsShift Then")
             sb.AppendLine("                Dim base_ = e.NoShift")
-            sb.AppendLine("                If base_ = Key.PageUp   Then NavigateRecord(_recordIndex - 1) : e.Handled = True")
-            sb.AppendLine("                If base_ = Key.PageDown Then NavigateRecord(_recordIndex + 1) : e.Handled = True")
-            sb.AppendLine("                If base_ = Key.Home     Then NavigateRecord(0) : e.Handled = True")
-            sb.AppendLine("                If base_ = Key.End      Then NavigateRecord(_records.Count - 1) : e.Handled = True")
+            sb.AppendLine("                If base_ = Key.PageUp Then")
+            sb.AppendLine("                    ' If no record loaded yet, go to last; otherwise go to previous.")
+            sb.AppendLine("                    Dim prev = If(_recordIndex < 0, DataFile.ReadAllRecords().Count - 1, _recordIndex - 1)")
+            sb.AppendLine("                    NavigateRecord(prev)")
+            sb.AppendLine("                    e.Handled = True")
+            sb.AppendLine("                End If")
+            sb.AppendLine("                If base_ = Key.PageDown Then")
+            sb.AppendLine("                    ' If no record loaded yet, go to first; otherwise go to next.")
+            sb.AppendLine("                    Dim nxt = If(_recordIndex < 0, 0, _recordIndex + 1)")
+            sb.AppendLine("                    NavigateRecord(nxt)")
+            sb.AppendLine("                    e.Handled = True")
+            sb.AppendLine("                End If")
+            sb.AppendLine("                If base_ = Key.Home Then NavigateRecord(0) : e.Handled = True")
+            sb.AppendLine("                If base_ = Key.End  Then")
+            sb.AppendLine("                    ' Re-read count so we land on the true last record.")
+            sb.AppendLine("                    NavigateRecord(DataFile.ReadAllRecords().Count - 1)")
+            sb.AppendLine("                    e.Handled = True")
+            sb.AppendLine("                End If")
             sb.AppendLine("            End If")
             sb.AppendLine("        End Sub")
             sb.AppendLine()
@@ -671,28 +796,28 @@ Imports System.Collections.Generic
             sb.AppendLine("        End Sub")
             sb.AppendLine()
 
-            ' Populate fields from a raw record string
+            ' Populate fields from a raw record string.
+            ' Uses ResolvedStart (1-based) baked in at code-gen time so that both
+            ' explicit START= fields and implicit sequential fields land at the correct offset.
             sb.AppendLine("        Private Sub PopulateFields(raw As String)")
             varIdx = 0
-            Dim pos = 0
             For Each scr In doc.Screens
                 For Each sfld In scr.Fields
                     Dim vn = fieldVars(varIdx) : varIdx += 1
-                    ' Find field start/len from record definition
-                    Dim fStart = pos
+                    ' Look up the resolved 1-based start and length from the record definition.
+                    Dim fOffset = 0   ' 0-based Substring offset (ResolvedStart - 1)
                     Dim fLen = sfld.Len
                     For Each r In doc.Data.Records
                         If String.Equals(r.Name, sfld.IntoRecord, StringComparison.OrdinalIgnoreCase) Then
                             For Each f In r.Fields
                                 If String.Equals(f.Name, sfld.IntoField, StringComparison.OrdinalIgnoreCase) Then
-                                    If f.Start > 0 Then fStart = f.Start - 1
+                                    fOffset = f.ResolvedStart - 1   ' convert 1-based → 0-based
                                     fLen = f.Len
                                 End If
                             Next
                         End If
                     Next
-                    sb.AppendLine($"            If raw.Length >= {fStart + fLen} Then {vn}.Text = raw.Substring({fStart}, {fLen}).TrimEnd()")
-                    pos += fLen
+                    sb.AppendLine($"            If raw.Length >= {fOffset + fLen} Then {vn}.Text = raw.Substring({fOffset}, {fLen}).TrimEnd()")
                 Next
             Next
             sb.AppendLine("        End Sub")
@@ -721,11 +846,22 @@ Imports System.Collections.Generic
                     End If
                 Next
             Next
-            If funcs.Count = 0 Then Return
+            If funcs.Count = 0 AndAlso doc.ValidateBlocks.Count = 0 Then Return
+
+            ' Build a lookup of defined blocks by name for O(1) access.
+            Dim blockMap As New Dictionary(Of String, ValidateBlock)(StringComparer.OrdinalIgnoreCase)
+            For Each blk In doc.ValidateBlocks
+                blockMap(blk.Name) = blk
+            Next
+            ' Also ensure every block name is in the funcs set so it gets emitted.
+            For Each blk In doc.ValidateBlocks
+                funcs.Add(blk.Name)
+            Next
 
             Dim sb As New StringBuilder
-            sb.AppendLine("' ValidationFunctions — stub implementations for VALIDATE WITH functions.")
-            sb.AppendLine("' Replace each function body with your real validation logic.")
+            sb.AppendLine("' ValidationFunctions — VALIDATE-SECTION compiled rules and stubs.")
+            sb.AppendLine("' Functions with a body were generated from VALIDATE blocks in the .def file.")
+            sb.AppendLine("' Functions marked TODO have no block defined — fill in your own logic.")
             sb.AppendLine("' Return values: True = accept, False = reject, a String = replace field value.")
             sb.AppendLine()
             sb.AppendLine($"Namespace {ns}")
@@ -733,15 +869,101 @@ Imports System.Collections.Generic
             sb.AppendLine()
             For Each fn In funcs
                 Dim safeFn = MakeSafeName(fn)
-                sb.AppendLine($"        ' TODO: Implement {safeFn}")
-                sb.AppendLine($"        Public Function {safeFn}(value As String) As Object")
-                sb.AppendLine($"            Return True  ' accept by default")
+                Dim blk As ValidateBlock = Nothing
+                blockMap.TryGetValue(fn, blk)
+
+                ' Determine if any rule in this block needs cross-field access.
+                Dim needsFields = blk IsNot Nothing AndAlso
+                    blk.Rules.Exists(Function(r) r.Kind = RuleKind.Assign AndAlso
+                        r.Expression.Exists(Function(t) t.Kind = ExprToken.ExprTokenKind.FieldName AndAlso
+                            Not String.Equals(t.Value, "VALUE", StringComparison.OrdinalIgnoreCase)))
+
+                If needsFields Then
+                    sb.AppendLine($"        Public Function {safeFn}(value As String, fields As System.Collections.Generic.Dictionary(Of String, String)) As Object")
+                Else
+                    sb.AppendLine($"        Public Function {safeFn}(value As String) As Object")
+                End If
+
+                If blk Is Nothing Then
+                    sb.AppendLine($"            ' TODO: Implement {safeFn}")
+                    sb.AppendLine($"            Return True  ' accept by default")
+                Else
+                    EmitValidateBlockBody(sb, blk)
+                End If
+
                 sb.AppendLine($"        End Function")
                 sb.AppendLine()
             Next
+            ' Emit the _ParseField helper if any compiled block uses arithmetic.
+            Dim needsParseHelper = doc.ValidateBlocks.Exists(
+                Function(b) b.Rules.Exists(Function(r) r.Kind = RuleKind.Assign))
+            If needsParseHelper Then
+                sb.AppendLine("        ' Internal helper: convert a field string to Double for arithmetic.")
+                sb.AppendLine("        Private Function _ParseField(s As String) As Double")
+                sb.AppendLine("            Dim v As Double")
+                sb.AppendLine("            Return If(Double.TryParse(s.Trim(), v), v, 0.0)")
+                sb.AppendLine("        End Function")
+                sb.AppendLine()
+            End If
             sb.AppendLine("    End Module")
             sb.AppendLine("End Namespace")
             Write(dir, "ValidationFunctions.vb", sb)
+        End Sub
+
+        ''' <summary>Emit the VB body lines for a compiled VALIDATE block.</summary>
+        Private Sub EmitValidateBlockBody(sb As StringBuilder, blk As ValidateBlock)
+            For Each rule In blk.Rules
+                Select Case rule.Kind
+
+                    Case RuleKind.NotEmpty
+                        If Not String.IsNullOrEmpty(rule.Message) Then
+                            sb.AppendLine($"            ' {EscapeString(rule.Message)}")
+                        End If
+                        sb.AppendLine("            If String.IsNullOrWhiteSpace(value) Then")
+                        If Not String.IsNullOrEmpty(rule.Message) Then
+                            sb.AppendLine($"                Return ""{EscapeString(rule.Message)}""")
+                        Else
+                            sb.AppendLine("                Return False")
+                        End If
+                        sb.AppendLine("            End If")
+
+                    Case RuleKind.Between
+                        If Not String.IsNullOrEmpty(rule.Message) Then
+                            sb.AppendLine($"            ' {EscapeString(rule.Message)}")
+                        End If
+                        sb.AppendLine("            Dim _n As Double")
+                        sb.AppendLine($"            If Not Double.TryParse(value.Trim(), _n) OrElse _n < {rule.LowBound} OrElse _n > {rule.HighBound} Then")
+                        If Not String.IsNullOrEmpty(rule.Message) Then
+                            sb.AppendLine($"                Return ""{EscapeString(rule.Message)}""")
+                        Else
+                            sb.AppendLine("                Return False")
+                        End If
+                        sb.AppendLine("            End If")
+
+                    Case RuleKind.Assign
+                        ' Build a VB expression string from the token list.
+                        Dim expr As New System.Text.StringBuilder
+                        For Each tok In rule.Expression
+                            Select Case tok.Kind
+                                Case ExprToken.ExprTokenKind.Number
+                                    expr.Append($"CDbl({tok.Value})")
+                                Case ExprToken.ExprTokenKind.Op
+                                    expr.Append($" {tok.Value} ")
+                                Case ExprToken.ExprTokenKind.FieldName
+                                    If String.Equals(tok.Value, "VALUE", StringComparison.OrdinalIgnoreCase) Then
+                                        expr.Append("_ParseField(value)")
+                                    Else
+                                        expr.Append($"_ParseField(If(fields IsNot Nothing AndAlso fields.ContainsKey(""{tok.Value}""), fields(""{tok.Value}""), """"))")
+                                    End If
+                            End Select
+                        Next
+                        sb.AppendLine($"            Dim _result As Double = {expr}")
+                        sb.AppendLine($"            Return _result.ToString(""G"")")
+
+                End Select
+            Next
+            ' If all rules passed (no early return from False), accept.
+            sb.AppendLine("            Return True")
         End Sub
 
         ' ── Utilities ─────────────────────────────────────────────────────────

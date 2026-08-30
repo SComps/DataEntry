@@ -954,7 +954,7 @@ Namespace DataEntry.Tests
 
                 Assert.Contains("fld.InsertionPoint = 0", mfContent)
                 Assert.Contains("fld.SuperView?.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop)", mfContent)
-                Assert.Contains("DataFile.SaveRecordAtIndex(_recordIndex, rec.ToString())", mfContent)
+                Assert.Contains("DataFile.SaveRecordAtIndex(_recordIndex, New String(buf))", mfContent)
                 Assert.Contains("If e = Key.F1 Then", mfContent)
                 Assert.Contains("ShowHelp()", mfContent)
             Finally
@@ -1240,6 +1240,496 @@ Namespace DataEntry.Tests
                 Dim tcEnd   = mfContent.IndexOf("End Sub", tcStart)
                 Dim tcBlock = mfContent.Substring(tcStart, tcEnd - tcStart)
                 Assert.DoesNotContain("ev.Result.Substring", tcBlock)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+    End Class
+
+    ' ── Field position, dead-space, and overlap validation tests ─────────────────
+
+    Public Class FieldPositionTests
+
+        ' Helper: build a minimal .def with a custom RECORD block.
+        Private Shared Function MakeDef(recordBody As String) As String
+            Return $"DATA-SECTION{vbCrLf}" &
+                   $"    FILE test.dat LRECL=80 LEND=CRLF{vbCrLf}" &
+                   $"{vbCrLf}" &
+                   $"RECORD TESTREC{vbCrLf}" &
+                   recordBody & vbCrLf &
+                   $"{vbCrLf}" &
+                   $"SCREEN-SECTION{vbCrLf}" &
+                   $"SCREEN TESTSCR COLOR=WhiteOnBlue{vbCrLf}" &
+                   $"    PROMPT ""x"" ROW=1 COL=1{vbCrLf}" &
+                   $"        COLOR=WhiteOnBlue{vbCrLf}"
+        End Function
+
+        ' ── ResolvedStart is populated for explicit and implicit fields ───────────
+
+        <Fact>
+        Public Sub ResolvedStart_ExplicitStart_UsesSpecifiedColumn()
+            Dim src = MakeDef("    ALPHA  START=1 LEN=5" & vbCrLf & "    FORMAT=XXXXX.")
+            Dim result = ParseAndValidate(src)
+            Dim fld = result.Doc.Data.Records(0).Fields(0)
+            Assert.Empty(HardErrors(result.ValidErrs))
+            Assert.Equal(1, fld.ResolvedStart)
+        End Sub
+
+        <Fact>
+        Public Sub ResolvedStart_ImplicitStart_UsesNextAvailableColumn()
+            Dim src = MakeDef(
+                "    ALPHA  START=1 LEN=5" & vbCrLf & "    FORMAT=XXXXX." & vbCrLf &
+                "    BETA   LEN=3" & vbCrLf & "    FORMAT=XXX.")
+            Dim result = ParseAndValidate(src)
+            Assert.Empty(HardErrors(result.ValidErrs))
+            Dim beta = result.Doc.Data.Records(0).Fields(1)
+            ' ALPHA occupies 1–5; BETA should start at 6.
+            Assert.Equal(6, beta.ResolvedStart)
+        End Sub
+
+        <Fact>
+        Public Sub ResolvedStart_DeadSpace_SkippedColumnsAllowed()
+            ' ALPHA at 1–5, BETA explicitly at 11–13 — columns 6–10 are dead space.
+            Dim src = MakeDef(
+                "    ALPHA  START=1  LEN=5" & vbCrLf & "    FORMAT=XXXXX." & vbCrLf &
+                "    BETA   START=11 LEN=3" & vbCrLf & "    FORMAT=XXX.")
+            Dim result = ParseAndValidate(src)
+            Assert.Empty(HardErrors(result.ValidErrs))
+            Assert.Equal(1, result.Doc.Data.Records(0).Fields(0).ResolvedStart)
+            Assert.Equal(11, result.Doc.Data.Records(0).Fields(1).ResolvedStart)
+        End Sub
+
+        ' ── START=0 is always a hard error ───────────────────────────────────────
+
+        <Fact>
+        Public Sub Validate_StartZero_IsHardError()
+            Dim src = MakeDef("    ALPHA  START=0 LEN=5" & vbCrLf & "    FORMAT=XXXXX.")
+            Dim result = ParseAndValidate(src)
+            Dim errs = HardErrors(result.ValidErrs)
+            Assert.Contains(errs, Function(e) e.Message.Contains("START=0") AndAlso e.Message.Contains("ALPHA"))
+        End Sub
+
+        ' Negative START values (e.g. START=-5) are rejected by the parser before they
+        ' reach the validator — the lexer emits a minus sign then a Number token, so
+        ' ConsumeInt produces a parse error. The validator's fld.Start < -1 guard is
+        ' a belt-and-suspenders safety net for any future parser path that stores negatives.
+
+        ' ── Overlapping fields are a hard error ───────────────────────────────────
+
+        <Fact>
+        Public Sub Validate_OverlappingFields_IsHardError()
+            ' ALPHA occupies 1–5; BETA starts at 3 — overlap on columns 3–5.
+            Dim src = MakeDef(
+                "    ALPHA  START=1 LEN=5" & vbCrLf & "    FORMAT=XXXXX." & vbCrLf &
+                "    BETA   START=3 LEN=4" & vbCrLf & "    FORMAT=XXXX.")
+            Dim result = ParseAndValidate(src)
+            Dim errs = HardErrors(result.ValidErrs)
+            Assert.Contains(errs, Function(e) e.Message.Contains("overlaps") AndAlso e.Message.Contains("BETA"))
+        End Sub
+
+        <Fact>
+        Public Sub Validate_AdjacentFields_NoOverlapError()
+            ' ALPHA 1–5, BETA 6–8 — exactly adjacent, no overlap.
+            Dim src = MakeDef(
+                "    ALPHA  START=1 LEN=5" & vbCrLf & "    FORMAT=XXXXX." & vbCrLf &
+                "    BETA   START=6 LEN=3" & vbCrLf & "    FORMAT=XXX.")
+            Dim result = ParseAndValidate(src)
+            Assert.Empty(HardErrors(result.ValidErrs))
+        End Sub
+
+        ' ── LRECL boundary ───────────────────────────────────────────────────────
+
+        <Fact>
+        Public Sub Validate_FieldExceedsLrecl_IsHardError()
+            ' LRECL=80; field starts at 78 with LEN=5 → last byte at 82, exceeds 80.
+            Dim src = MakeDef("    ALPHA  START=78 LEN=5" & vbCrLf & "    FORMAT=XXXXX.")
+            Dim result = ParseAndValidate(src)
+            Dim errs = HardErrors(result.ValidErrs)
+            Assert.Contains(errs, Function(e) e.Message.Contains("exceeds LRECL") AndAlso e.Message.Contains("ALPHA"))
+        End Sub
+
+        <Fact>
+        Public Sub Validate_FieldExactlyFitsLrecl_NoError()
+            ' LRECL=80; field starts at 76 with LEN=5 → last byte at 80, exactly fits.
+            Dim src = MakeDef("    ALPHA  START=76 LEN=5" & vbCrLf & "    FORMAT=XXXXX.")
+            Dim result = ParseAndValidate(src)
+            Assert.Empty(HardErrors(result.ValidErrs))
+        End Sub
+
+    End Class
+
+    ' ── VALIDATE-SECTION parse, validator, and codegen tests ─────────────────
+
+    Public Class ValidateSectionTests
+
+        ' Minimal .def skeleton that includes a VALIDATE-SECTION.
+        Private Shared Function MakeValidateDef(recordBody As String,
+                                                validateBody As String,
+                                                Optional screenFieldExtra As String = "") As String
+            Return $"DATA-SECTION{vbCrLf}" &
+                   $"    FILE test.dat LRECL=80 LEND=CRLF{vbCrLf}" &
+                   $"{vbCrLf}" &
+                   $"RECORD WORK{vbCrLf}" &
+                   recordBody & vbCrLf &
+                   $"{vbCrLf}" &
+                   $"VALIDATE-SECTION{vbCrLf}" &
+                   validateBody & vbCrLf &
+                   $"{vbCrLf}" &
+                   $"SCREEN-SECTION{vbCrLf}" &
+                   $"SCREEN ENTRY COLOR=WhiteOnBlue{vbCrLf}" &
+                   $"    PROMPT ""x"" ROW=1 COL=1{vbCrLf}" &
+                   $"        COLOR=WhiteOnBlue{vbCrLf}" &
+                   If(String.IsNullOrEmpty(screenFieldExtra), "",
+                      screenFieldExtra & vbCrLf)
+        End Function
+
+        ' ── Parser tests ─────────────────────────────────────────────────────
+
+        <Fact>
+        Public Sub Parse_ValidateSection_NotEmpty_Rule()
+            Dim src = MakeValidateDef(
+                "    HOURS  START=1 LEN=5" & vbCrLf & "    FORMAT=ZZZZZ.",
+                "VALIDATE CHECKHOURS" & vbCrLf &
+                "    NOT EMPTY MESSAGE ""Hours cannot be blank""")
+            Dim result = ParseDsl(src)
+            Assert.Empty(result.Errors)
+            Assert.Single(result.Doc.ValidateBlocks)
+            Dim blk = result.Doc.ValidateBlocks(0)
+            Assert.Equal("CHECKHOURS", blk.Name)
+            Assert.Single(blk.Rules)
+            Dim rule = blk.Rules(0)
+            Assert.Equal(RuleKind.NotEmpty, rule.Kind)
+            Assert.Equal("Hours cannot be blank", rule.Message)
+        End Sub
+
+        <Fact>
+        Public Sub Parse_ValidateSection_Between_Rule()
+            Dim src = MakeValidateDef(
+                "    HOURS  START=1 LEN=5" & vbCrLf & "    FORMAT=ZZZZZ.",
+                "VALIDATE CHECKHOURS" & vbCrLf &
+                "    VALUE IS BETWEEN 0 AND 80 MESSAGE ""Hours must be 0-80""")
+            Dim result = ParseDsl(src)
+            Assert.Empty(result.Errors)
+            Dim rule = result.Doc.ValidateBlocks(0).Rules(0)
+            Assert.Equal(RuleKind.Between, rule.Kind)
+            Assert.Equal("0", rule.LowBound)
+            Assert.Equal("80", rule.HighBound)
+            Assert.Equal("Hours must be 0-80", rule.Message)
+        End Sub
+
+        <Fact>
+        Public Sub Parse_ValidateSection_Assign_Rule()
+            Dim src = MakeValidateDef(
+                "    HOURS  START=1  LEN=5" & vbCrLf & "    FORMAT=ZZZZZ." & vbCrLf &
+                "    RATE   START=6  LEN=6" & vbCrLf & "    FORMAT=ZZZ999." & vbCrLf &
+                "    GROSS  START=12 LEN=8" & vbCrLf & "    FORMAT=ZZZZZZ99.",
+                "VALIDATE CALCGROSS" & vbCrLf &
+                "    GROSS IS HOURS * RATE")
+            Dim result = ParseDsl(src)
+            Assert.Empty(result.Errors)
+            Dim rule = result.Doc.ValidateBlocks(0).Rules(0)
+            Assert.Equal(RuleKind.Assign, rule.Kind)
+            Assert.Equal("GROSS", rule.TargetField)
+            Assert.Equal(3, rule.Expression.Count)   ' HOURS * RATE
+            Assert.Equal("HOURS", rule.Expression(0).Value)
+            Assert.Equal("*", rule.Expression(1).Value)
+            Assert.Equal("RATE", rule.Expression(2).Value)
+        End Sub
+
+        <Fact>
+        Public Sub Parse_MultipleBlocks_BothParsed()
+            Dim src = MakeValidateDef(
+                "    HOURS  START=1 LEN=5" & vbCrLf & "    FORMAT=ZZZZZ." & vbCrLf &
+                "    RATE   START=6 LEN=6" & vbCrLf & "    FORMAT=ZZZ999.",
+                "VALIDATE CHECKHOURS" & vbCrLf &
+                "    NOT EMPTY" & vbCrLf &
+                "VALIDATE CHECKRATE" & vbCrLf &
+                "    NOT EMPTY")
+            Dim result = ParseDsl(src)
+            Assert.Empty(result.Errors)
+            Assert.Equal(2, result.Doc.ValidateBlocks.Count)
+            Assert.Equal("CHECKHOURS", result.Doc.ValidateBlocks(0).Name)
+            Assert.Equal("CHECKRATE", result.Doc.ValidateBlocks(1).Name)
+        End Sub
+
+        <Fact>
+        Public Sub Parse_MultipleRulesInOneBlock()
+            Dim src = MakeValidateDef(
+                "    HOURS  START=1 LEN=5" & vbCrLf & "    FORMAT=ZZZZZ.",
+                "VALIDATE CHECKHOURS" & vbCrLf &
+                "    NOT EMPTY MESSAGE ""Required""" & vbCrLf &
+                "    VALUE IS BETWEEN 0 AND 80 MESSAGE ""Must be 0-80""")
+            Dim result = ParseDsl(src)
+            Assert.Empty(result.Errors)
+            Assert.Equal(2, result.Doc.ValidateBlocks(0).Rules.Count)
+        End Sub
+
+        ' ── Validator semantic tests ──────────────────────────────────────────
+
+        <Fact>
+        Public Sub Validate_ValidateSection_NoErrors_ForValidBlock()
+            Dim src = MakeValidateDef(
+                "    HOURS  START=1 LEN=5" & vbCrLf & "    FORMAT=ZZZZZ.",
+                "VALIDATE CHECKHOURS" & vbCrLf &
+                "    NOT EMPTY" & vbCrLf &
+                "    VALUE IS BETWEEN 0 AND 80")
+            Dim result = ParseAndValidate(src)
+            Assert.Empty(HardErrors(result.ValidErrs))
+        End Sub
+
+        <Fact>
+        Public Sub Validate_DuplicateBlockName_IsHardError()
+            Dim src = MakeValidateDef(
+                "    HOURS  START=1 LEN=5" & vbCrLf & "    FORMAT=ZZZZZ.",
+                "VALIDATE CHECKHOURS" & vbCrLf &
+                "    NOT EMPTY" & vbCrLf &
+                "VALIDATE CHECKHOURS" & vbCrLf &
+                "    NOT EMPTY")
+            Dim result = ParseAndValidate(src)
+            Assert.Contains(HardErrors(result.ValidErrs),
+                Function(e) e.Message.Contains("Duplicate VALIDATE block name") AndAlso e.Message.Contains("CHECKHOURS"))
+        End Sub
+
+        <Fact>
+        Public Sub Validate_AssignUnknownField_IsHardError()
+            Dim src = MakeValidateDef(
+                "    HOURS  START=1 LEN=5" & vbCrLf & "    FORMAT=ZZZZZ.",
+                "VALIDATE CALC" & vbCrLf &
+                "    NOSUCHFIELD IS HOURS * 2")
+            Dim result = ParseAndValidate(src)
+            Assert.Contains(HardErrors(result.ValidErrs),
+                Function(e) e.Message.Contains("NOSUCHFIELD"))
+        End Sub
+
+        <Fact>
+        Public Sub Validate_BlockDefinedInSection_NoWarningOnField()
+            ' When a VALIDATE WITH name matches a defined block, no warning should be emitted.
+            Dim src = MakeValidateDef(
+                "    HOURS  START=1 LEN=5" & vbCrLf & "    FORMAT=ZZZZZ.",
+                "VALIDATE CHECKHOURS" & vbCrLf &
+                "    NOT EMPTY",
+                "    FIELD ROW=5 COL=20 LEN=5 INTO WORK.HOURS VALIDATE WITH CHECKHOURS" & vbCrLf &
+                "        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed")
+            Dim result = ParseAndValidate(src)
+            Assert.Empty(HardErrors(result.ValidErrs))
+            Assert.Empty(result.ValidErrs.FindAll(Function(e) e.Severity = "Warning" AndAlso
+                                                               e.Message.Contains("CHECKHOURS")))
+        End Sub
+
+        ' ── Code-gen tests ───────────────────────────────────────────────────
+
+        <Fact>
+        Public Sub CodeGen_NotEmptyBlock_EmitsRealBody()
+            Dim src = MakeValidateDef(
+                "    HOURS  START=1 LEN=5" & vbCrLf & "    FORMAT=ZZZZZ.",
+                "VALIDATE CHECKHOURS" & vbCrLf &
+                "    NOT EMPTY MESSAGE ""Hours cannot be blank""")
+            Dim result = ParseAndValidate(src)
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_vtest_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "ValidationFunctions.vb"))
+                ' Should contain real logic, not a TODO stub.
+                Assert.Contains("IsNullOrWhiteSpace", content)
+                Assert.Contains("Hours cannot be blank", content)
+                ' The header has a comment mentioning TODO; ensure no function body has it.
+                Assert.DoesNotContain("' TODO: Implement", content)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        <Fact>
+        Public Sub CodeGen_BetweenBlock_EmitsRangeCheck()
+            Dim src = MakeValidateDef(
+                "    HOURS  START=1 LEN=5" & vbCrLf & "    FORMAT=ZZZZZ.",
+                "VALIDATE CHECKHOURS" & vbCrLf &
+                "    VALUE IS BETWEEN 0 AND 80")
+            Dim result = ParseAndValidate(src)
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_vtest_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "ValidationFunctions.vb"))
+                Assert.Contains("TryParse", content)
+                Assert.Contains("_n < 0", content)
+                Assert.Contains("_n > 80", content)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        <Fact>
+        Public Sub CodeGen_AssignBlock_EmitsArithmeticAndParseHelper()
+            Dim src = MakeValidateDef(
+                "    HOURS  START=1  LEN=5" & vbCrLf & "    FORMAT=ZZZZZ." & vbCrLf &
+                "    RATE   START=6  LEN=6" & vbCrLf & "    FORMAT=ZZZ999." & vbCrLf &
+                "    GROSS  START=12 LEN=8" & vbCrLf & "    FORMAT=ZZZZZZ99.",
+                "VALIDATE CALCGROSS" & vbCrLf &
+                "    GROSS IS HOURS * RATE")
+            Dim result = ParseAndValidate(src)
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_vtest_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "ValidationFunctions.vb"))
+                Assert.Contains("_ParseField", content)
+                Assert.Contains("_result", content)
+                Assert.Contains("RATE", content)
+                Assert.Contains("HOURS", content)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        <Fact>
+        Public Sub CodeGen_StubOnly_WhenNoBlockDefined()
+            ' VALIDATE WITH a name that has no block — should still get a TODO stub.
+            Dim src = MakeValidateDef(
+                "    HOURS  START=1 LEN=5" & vbCrLf & "    FORMAT=ZZZZZ.",
+                "",   ' empty VALIDATE-SECTION
+                "    FIELD ROW=5 COL=20 LEN=5 INTO WORK.HOURS VALIDATE WITH MYCHECK" & vbCrLf &
+                "        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed")
+            Dim result = ParseAndValidate(src)
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_vtest_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "ValidationFunctions.vb"))
+                Assert.Contains("TODO", content)
+                Assert.Contains("MYCHECK", content)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+    End Class
+
+    ' ── PROTECTED field tests ────────────────────────────────────────────────
+
+    Public Class ProtectedFieldTests
+
+        Private Shared Function MakeProtectedDef(screenFieldLine As String) As String
+            Return $"DATA-SECTION{vbCrLf}" &
+                   $"    FILE test.dat LRECL=40 LEND=CRLF{vbCrLf}" &
+                   $"RECORD WORK{vbCrLf}" &
+                   $"    HOURS  START=1  LEN=5" & vbCrLf & "    FORMAT=ZZZZZ." & vbCrLf &
+                   $"    RATE   START=6  LEN=5" & vbCrLf & "    FORMAT=ZZZZZ." & vbCrLf &
+                   $"    GROSS  START=11 LEN=8" & vbCrLf & "    FORMAT=ZZZZZZ99." & vbCrLf &
+                   $"VALIDATE-SECTION{vbCrLf}" &
+                   $"VALIDATE CALCGROSS{vbCrLf}" &
+                   $"    GROSS IS HOURS * RATE{vbCrLf}" &
+                   $"SCREEN-SECTION{vbCrLf}" &
+                   $"SCREEN ENTRY COLOR=WhiteOnBlue{vbCrLf}" &
+                   $"    PROMPT ""x"" ROW=1 COL=1{vbCrLf}" &
+                   $"        COLOR=WhiteOnBlue{vbCrLf}" &
+                   screenFieldLine & vbCrLf
+        End Function
+
+        ' ── Parser tests ─────────────────────────────────────────────────────
+
+        <Fact>
+        Public Sub Parse_Protected_Flag_SetToTrue()
+            Dim src = MakeProtectedDef(
+                "    FIELD ROW=5 COL=20 LEN=8 INTO WORK.GROSS PROTECTED" & vbCrLf &
+                "        NORMAL=WhiteOnBlue")
+            Dim result = ParseDsl(src)
+            Assert.Empty(result.Errors)
+            Dim fld = result.Doc.Screens(0).Fields(0)
+            Assert.True(fld.IsProtected)
+        End Sub
+
+        <Fact>
+        Public Sub Parse_NoProtected_DefaultsFalse()
+            Dim src = MakeProtectedDef(
+                "    FIELD ROW=5 COL=20 LEN=8 INTO WORK.GROSS" & vbCrLf &
+                "        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed")
+            Dim result = ParseDsl(src)
+            Assert.Empty(result.Errors)
+            Dim fld = result.Doc.Screens(0).Fields(0)
+            Assert.False(fld.IsProtected)
+        End Sub
+
+        ' ── Validator tests ───────────────────────────────────────────────────
+
+        <Fact>
+        Public Sub Validate_AssignTarget_OnScreen_WithoutProtected_EmitsWarning()
+            Dim src = MakeProtectedDef(
+                "    FIELD ROW=5 COL=20 LEN=8 INTO WORK.GROSS" & vbCrLf &
+                "        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed")
+            Dim result = ParseAndValidate(src)
+            Assert.Empty(HardErrors(result.ValidErrs))
+            Dim warnings = result.ValidErrs.FindAll(Function(e) e.Severity = "Warning")
+            Assert.Contains(warnings, Function(w) w.Message.Contains("GROSS") AndAlso w.Message.Contains("PROTECTED"))
+        End Sub
+
+        <Fact>
+        Public Sub Validate_AssignTarget_OnScreen_WithProtected_NoWarning()
+            Dim src = MakeProtectedDef(
+                "    FIELD ROW=5 COL=20 LEN=8 INTO WORK.GROSS PROTECTED" & vbCrLf &
+                "        NORMAL=WhiteOnBlue")
+            Dim result = ParseAndValidate(src)
+            Assert.Empty(HardErrors(result.ValidErrs))
+            Assert.Empty(result.ValidErrs.FindAll(
+                Function(e) e.Severity = "Warning" AndAlso e.Message.Contains("PROTECTED")))
+        End Sub
+
+        <Fact>
+        Public Sub Validate_AssignTarget_NotOnScreen_NoWarning()
+            ' GROSS is in the record but not on the screen at all — no warning needed.
+            Dim src = $"DATA-SECTION{vbCrLf}" &
+                      $"    FILE test.dat LRECL=40 LEND=CRLF{vbCrLf}" &
+                      $"RECORD WORK{vbCrLf}" &
+                      $"    HOURS  START=1  LEN=5" & vbCrLf & "    FORMAT=ZZZZZ." & vbCrLf &
+                      $"    RATE   START=6  LEN=5" & vbCrLf & "    FORMAT=ZZZZZ." & vbCrLf &
+                      $"    GROSS  START=11 LEN=8" & vbCrLf & "    FORMAT=ZZZZZZ99." & vbCrLf &
+                      $"VALIDATE-SECTION{vbCrLf}" &
+                      $"VALIDATE CALCGROSS{vbCrLf}" &
+                      $"    GROSS IS HOURS * RATE{vbCrLf}" &
+                      $"SCREEN-SECTION{vbCrLf}" &
+                      $"SCREEN ENTRY COLOR=WhiteOnBlue{vbCrLf}" &
+                      $"    PROMPT ""x"" ROW=1 COL=1{vbCrLf}" &
+                      $"        COLOR=WhiteOnBlue{vbCrLf}"
+            Dim result = ParseAndValidate(src)
+            Assert.Empty(HardErrors(result.ValidErrs))
+            Assert.Empty(result.ValidErrs.FindAll(
+                Function(e) e.Severity = "Warning" AndAlso e.Message.Contains("PROTECTED")))
+        End Sub
+
+        ' ── Code-gen tests ───────────────────────────────────────────────────
+
+        <Fact>
+        Public Sub CodeGen_Protected_EmitsReadOnlyAndNoTabStop()
+            Dim src = MakeProtectedDef(
+                "    FIELD ROW=5 COL=20 LEN=8 INTO WORK.GROSS PROTECTED" & vbCrLf &
+                "        NORMAL=WhiteOnBlue")
+            Dim result = ParseAndValidate(src)
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_prot_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+                Assert.Contains("ReadOnly = True", content)
+                Assert.Contains("TabStop  = False", content)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        <Fact>
+        Public Sub CodeGen_Protected_NoTextChangingHandler()
+            Dim src = MakeProtectedDef(
+                "    FIELD ROW=5 COL=20 LEN=8 INTO WORK.GROSS PROTECTED" & vbCrLf &
+                "        NORMAL=WhiteOnBlue")
+            Dim result = ParseAndValidate(src)
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_prot_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+                Assert.DoesNotContain("TextChanging", content)
             Finally
                 If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
             End Try

@@ -86,7 +86,7 @@ and produces a self-contained single-file executable:
     DataFile.vb
     FormatHelper.vb
     ColorHelper.vb
-    ValidationFunctions.vb   (only when VALIDATE WITH is used)
+    ValidationFunctions.vb   (only when VALIDATE WITH or VALIDATE-SECTION is used)
     publish\
         <name>.exe            (Windows) or <name> (Linux/macOS)
         libonigwrap.dll/.so   native dependency — must stay beside the exe
@@ -103,10 +103,11 @@ publish\sample.exe          (Windows)
 
 ## Language Reference
 
-A `.def` file has two required sections, in this order:
+A `.def` file has two required sections plus one optional section, in this order:
 
 1. `DATA-SECTION` — describes the output file and its record layout.
 2. `SCREEN-SECTION` — describes the data-entry screens.
+3. `VALIDATE-SECTION` *(optional)* — named validation blocks with rules.
 
 Lines beginning with `*` or `//` are comments.
 
@@ -146,16 +147,45 @@ DATA-SECTION
 RECORD <name>
     <fieldname>  [START=<n>]  LEN=<n>
     FORMAT=<mask>.
-    <fieldname>  LEN=<n>
-    FORMAT=<mask>.
+    <fieldname>  [START=<n>]  LEN=<n>
     ...
 ```
 
 - `<name>` — identifier used in `INTO` clauses on the screen.
-- `START=<n>` — byte position of the first character (1-based).  If omitted,
-  the field starts immediately after the previous field.
+- `START=<n>` — 1-based byte position of the first character of this field.
+  **Optional on every field** (see implicit positioning below).
 - `LEN=<n>` — number of bytes this field occupies in the record.
 - `FORMAT=<mask>.` — input mask (see below).  The mask **must end with a dot**.
+
+### Implicit field positioning
+
+`START=` is optional.  When omitted the field starts immediately after the
+last byte of the preceding field (or at column 1 for the very first field).
+
+```
+RECORD CUST
+    FIRSTNAME  START=1  LEN=20   * explicit — starts at col 1
+    LASTNAME            LEN=20   * implicit — starts at col 21
+    CITY                LEN=20   * implicit — starts at col 41
+```
+
+Use an explicit `START=` on any field to leave **dead space** (filler bytes)
+in the record — useful when a layout reserves bytes for future use or must
+interoperate with an existing file format:
+
+```
+RECORD EMPLOYEE
+    EMPNO    START=1   LEN=6    * cols  1–6
+    NAME     START=8   LEN=30   * cols  8–37  (col 7 is dead space)
+    DEPT               LEN=4    * cols 38–41  (implicit, follows NAME)
+    SALARY   START=50  LEN=10   * cols 50–59  (cols 42–49 are dead space)
+```
+
+**Rules:**
+- Column numbers are 1-based — `START=1` is the first byte.
+- `START=0` or any negative value is a hard error.
+- If a field's range overlaps a previously-defined field, that is a hard error.
+- If a field's last byte exceeds `LRECL`, that is a hard error.
 
 ### FORMAT Mask Characters
 
@@ -211,7 +241,7 @@ SCREEN-SECTION
 SCREEN <name>  [COLOR=<fg>On<bg>]  [FG=<color>]  [BG=<color>]
     PROMPT "<text>"  ROW=<n>  COL=<n>  [COLOR=<color>]
     FIELD  ROW=<n>  COL=<n>  LEN=<n>  INTO <record>.<field>
-           [VALIDATE WITH <function>]
+           [VALIDATE WITH <function>]  [PROTECTED]
         [NORMAL=<color>  FOCUS=<color>  ERROR=<color>  FULL=<ADVANCE|STAY>]
     ...
 
@@ -250,13 +280,30 @@ PROMPT "<text>"  ROW=<n>  COL=<n>
 | `COL=<n>` | Yes | Screen column (1-based) |
 | `LEN=<n>` | Yes | Width of the input box in characters — must match the FORMAT mask length |
 | `INTO <rec>.<fld>` | Yes | Which record field receives this value on save |
-| `VALIDATE WITH <fn>` | No | Validation function called on save |
+| `VALIDATE WITH <fn>` | No | Validation function called when the field loses focus |
+| `PROTECTED` | No | Display-only field — user can see but not edit (see below) |
 
 An optional inline label can precede the position keywords:
 
 ```
 FIELD "Phone" ROW=8 COL=2 LEN=12 INTO CUST.CPHONE
 ```
+
+### PROTECTED fields
+
+Adding `PROTECTED` to a `FIELD` line makes it **display-only**:
+
+```
+FIELD ROW=5 COL=30 LEN=10 INTO TIME.GROSS PROTECTED
+```
+
+- The field is rendered on screen but the user cannot tab into it or type in it
+  (3270-style protected field semantics).
+- Its value **is** saved to and loaded from the data file normally.
+- Typically used for calculated fields whose values are set by a
+  `VALIDATE-SECTION` assignment rule (see below).  If a `VALIDATE-SECTION`
+  rule targets a screen field that is *not* `PROTECTED`, the compiler emits a
+  warning because the user could overwrite the calculated value.
 
 ### Field colour states and behaviour
 
@@ -270,7 +317,7 @@ On the line(s) following a `FIELD`, specify colour states and full-field behavio
 |-----------|----------------|
 | `NORMAL=<color>` | Field is visible but not focused |
 | `FOCUS=<color>` | Field is currently active |
-| `ERROR=<color>` | Validation returned `False` |
+| `ERROR=<color>` | Validation returned an error |
 | `FULL=ADVANCE` | When the field fills, automatically move to the next field (or save if last). **This is the default.** |
 | `FULL=STAY` | When the field fills, hold the cursor and wait for Tab or Enter. Useful for fixed codes where the operator should review before advancing. |
 
@@ -303,16 +350,119 @@ The 16 standard console colours:
 ## VALIDATE WITH
 
 When a field has `VALIDATE WITH <function>`, that function is called every time
-the user saves a record.  It receives the field value as a string and must return:
+the field loses focus (the user tabs away).  It receives the field value as a
+string and must return:
 
 | Return value | Meaning |
 |--------------|---------|
 | `True` | Accept the value |
-| `False` | Reject; show the field in ERROR colour and keep focus there |
+| `False` | Reject; show the field in ERROR colour and display a status message |
 | A string | Replace the field value with this string, then accept |
 
-The compiler generates stub functions in `ValidationFunctions.vb` inside the output
-project.  Fill in the function bodies with your real validation logic.
+If a matching `VALIDATE <function>` block exists in the `VALIDATE-SECTION` the
+compiler generates a **real implementation** in `ValidationFunctions.vb`.
+If no block exists, the compiler generates a **stub** — a `TODO` placeholder
+for you to fill in manually.
+
+---
+
+## VALIDATE-SECTION
+
+The optional `VALIDATE-SECTION` lets you define validation logic directly in
+the `.def` file.  Each named block corresponds to a `VALIDATE WITH` reference
+on a screen field.
+
+```
+VALIDATE-SECTION
+
+VALIDATE <name>
+    NOT EMPTY [MESSAGE "<text>"]
+    VALUE IS BETWEEN <lo> AND <hi> [MESSAGE "<text>"]
+    <targetfield> IS <expression> [MESSAGE "<text>"]
+    ...
+
+VALIDATE <name2>
+    ...
+```
+
+A single `VALIDATE` block may contain **any number** of rules; they are
+evaluated in order when the field loses focus.  The first rule that fails
+stops evaluation and displays the message (or a default message if `MESSAGE`
+is omitted).
+
+### Rule kinds
+
+#### NOT EMPTY
+
+```
+NOT EMPTY
+NOT EMPTY MESSAGE "A value is required."
+```
+
+Fails if the field value is blank or all spaces.
+
+#### VALUE IS BETWEEN
+
+```
+VALUE IS BETWEEN 1 AND 168
+VALUE IS BETWEEN 0.5 AND 999.99 MESSAGE "Hours must be between 0.5 and 999.99."
+```
+
+Fails if the field value, parsed as a number, is outside the inclusive range
+`[lo, hi]`.  Also fails if the value is not a valid number.  Decimal bounds
+are supported (`0.5`, `999.99`).
+
+#### Assignment rule (`<target> IS <expression>`)
+
+```
+GROSS IS HOURS * RATE
+TAX   IS GROSS * 0.2
+TOTAL IS SUBTOTAL + TAX
+```
+
+Computes an arithmetic expression using field values and stores the result
+in `<target>`.  This rule **does not fail** — it is an unconditional
+assignment that fires when the validated field loses focus.
+
+- `<target>` must be a field name defined in a `RECORD`.
+- Operands can be field names or numeric literals.
+- Operators: `+`, `-`, `*`, `/`.
+- Operator precedence is **left-to-right** (no parentheses).
+- If `<target>` appears on the screen it should be declared `PROTECTED` to
+  prevent the user from overwriting the calculated value.
+
+### Status bar
+
+The generated application shows validation messages in a **status bar** at the
+bottom of the screen.  When a rule fails its `MESSAGE` text (or a default
+message) is displayed there.  The bar clears when the field passes validation.
+
+### Example
+
+```
+VALIDATE-SECTION
+
+VALIDATE CheckHours
+    NOT EMPTY MESSAGE "Hours worked is required."
+    VALUE IS BETWEEN 0.01 AND 168 MESSAGE "Hours must be between 0.01 and 168."
+
+VALIDATE CalcGross
+    NOT EMPTY MESSAGE "Rate is required."
+    GROSS IS HOURS * RATE
+```
+
+Paired with the screen fields:
+
+```
+FIELD "Hours" ROW=5 COL=10 LEN=6 INTO TIME.HOURS  VALIDATE WITH CheckHours
+FIELD "Rate"  ROW=6 COL=10 LEN=8 INTO TIME.RATE   VALIDATE WITH CalcGross
+FIELD         ROW=7 COL=10 LEN=10 INTO TIME.GROSS  PROTECTED
+```
+
+When the operator tabs away from **Rate**, the `CalcGross` block fires:
+first it checks that `RATE` is not empty, then it computes
+`GROSS = HOURS * RATE` and writes the result into the protected `GROSS` field
+on screen and into the record buffer.
 
 ---
 
@@ -352,15 +502,15 @@ DATA-SECTION
 RECORD CUST
     CNAME   START=1  LEN=30
     FORMAT=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.
-    CADDR   LEN=30
+    CADDR            LEN=30
     FORMAT=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.
-    CSTATE  LEN=2
+    CSTATE           LEN=2
     FORMAT=UU.
-    CZIP    LEN=5
+    CZIP             LEN=5
     FORMAT=99999.
-    CPHONE  LEN=12
+    CPHONE           LEN=12
     FORMAT=999\-999\-9999.
-    CEMAIL  LEN=8
+    CEMAIL           LEN=8
     FORMAT=XXXXXXXX.
 
 SCREEN-SECTION
@@ -392,6 +542,8 @@ SCREEN CUST-ENTRY COLOR=WhiteOnBlue
 ```
 
 Notes on this form:
+- `CNAME` has `START=1`; all subsequent fields omit `START=` and are
+  positioned implicitly — `CADDR` at col 31, `CSTATE` at col 61, etc.
 - `CPHONE` has a `FORMAT=999\-999\-9999.` mask.  The compiler automatically
   shows a `###-###-####` hint to the right of the field.  Type 10 digits;
   the hyphens are inserted automatically when the record is saved.
@@ -447,9 +599,16 @@ Records are written to `customers.dat` as 87-byte fixed-length lines.
 | `LRECL must be greater than zero` | `LRECL=0` or omitted | Specify `LRECL=<n>` with a positive integer |
 | `Duplicate record name '<name>'` | Two `RECORD` blocks share a name | Rename one |
 | `Duplicate field name '<name>'` | Two fields in the same record share a name | Rename one |
+| `START=<n> is invalid` | `START=0` or a negative value was specified | Column numbers are 1-based; use `START=1` for the first column |
+| `Field '<f>' overlaps a previously defined field` | Two fields occupy the same byte range | Adjust `START=` or `LEN=` so the ranges do not overlap |
 | `Field '<f>' exceeds LRECL` | `START + LEN` exceeds the record length | Reduce `LEN`, adjust `START`, or increase `LRECL` |
 | `FORMAT mask is longer than LEN` | Mask has more positions than `LEN` — data would be truncated | Increase `LEN` to match the mask length (count each `\c` pair as one position) |
 | `FORMAT mask is shorter than LEN` *(warning)* | Mask has fewer positions than `LEN` | Acceptable for partial-fill fields; increase mask length to fill completely |
 | `Unknown record '<rec>'` | Screen field `INTO` references an undefined record | Check record name spelling |
 | `Unknown field '<rec>.<fld>'` | Screen field `INTO` references an undefined field | Check field name spelling |
 | `FILE path contains '..' or is absolute` *(warning)* | Path may write outside the working directory | Verify the path is intentional |
+| `Duplicate VALIDATE block name '<name>'` | Two `VALIDATE` blocks share a name | Rename one |
+| `VALIDATE '<blk>': target field '<f>' is not defined in any RECORD` | Assignment rule targets an unknown field | Check the field name spelling or add the field to a RECORD |
+| `VALIDATE '<blk>': expression references unknown field '<f>'` | Expression operand is not a record field | Check the field name spelling |
+| `VALIDATE '<blk>': target field '<f>' is on the screen but not PROTECTED` *(warning)* | Calculated field is editable — user can overwrite computed value | Add `PROTECTED` to that screen `FIELD` |
+| `VALIDATE WITH '<fn>' — ensure this function is defined` *(warning)* | No matching `VALIDATE` block found in `VALIDATE-SECTION` | Add a `VALIDATE <fn>` block, or implement the stub in `ValidationFunctions.vb` |

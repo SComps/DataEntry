@@ -29,19 +29,24 @@ Imports System.Collections.Generic
 
         ' All keywords, upper-cased for comparison.
         Private Shared ReadOnly Keywords As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase) From {
-            "DATA-SECTION", "SCREEN-SECTION", "RECORD", "FIELD", "FILE",
+            "DATA-SECTION", "SCREEN-SECTION", "VALIDATE-SECTION", "RECORD", "FIELD", "FILE",
             "APPEND", "NOAPPEND", "LRECL", "LEND", "CRLF", "LF", "CR", "NONE",
             "FORMAT", "START", "LEN", "ROW", "COL", "INTO", "VALIDATE", "WITH",
             "SCREEN", "COLOR", "FG", "BG", "NORMAL", "FOCUS", "ERROR",
             "PROMPT", "LABEL", "PROMPT_ROW", "PROMPT_COL", "LABEL_ROW", "LABEL_COL",
             "FIELD_ROW", "FIELD_COL",
-            "FULL", "ADVANCE", "STAY"
+            "FULL", "ADVANCE", "STAY",
+            "NOT", "EMPTY", "VALUE", "IS", "BETWEEN", "AND", "MESSAGE",
+            "PROTECTED"
         }
 
         Private ReadOnly _src As String
         Private _pos As Integer = 0
         Private _line As Integer = 1
         Private _col As Integer = 1
+        ' True once a real token has been emitted on the current source line.
+        ' Used to distinguish * as a comment leader (first on line) vs * as multiply.
+        Private _lineHasToken As Boolean = False
 
         Public Sub New(source As String)
             _src = source
@@ -52,6 +57,7 @@ Imports System.Collections.Generic
         Public Function Tokenize() As List(Of Token)
             Dim tokens As New List(Of Token)
             Dim lastWasNewline As Boolean = True  ' suppress leading blank lines
+            _lineHasToken = False
 
             Do While _pos < _src.Length
                 Dim ch = _src(_pos)
@@ -60,8 +66,9 @@ Imports System.Collections.Generic
                 If ch = " "c OrElse ch = Chr(9) Then
                     Advance()
 
-                ' Comments — * or // to end of line
-                ElseIf ch = "*"c OrElse (ch = "/"c AndAlso Peek(1) = "/"c) Then
+                ' Comments — * only when it is the first non-whitespace on the line, or // anywhere.
+                ' This lets * appear mid-line as a multiplication operator in VALIDATE expressions.
+                ElseIf (ch = "*"c AndAlso Not _lineHasToken) OrElse (ch = "/"c AndAlso Peek(1) = "/"c) Then
                     SkipToEndOfLine()
 
                 ' Newlines — collapse multiple blank lines into one token
@@ -71,40 +78,49 @@ Imports System.Collections.Generic
                         tokens.Add(MakeTok(TokenType.Newline, "", _line, _col))
                         lastWasNewline = True
                     End If
+                    _lineHasToken = False   ' reset: new line, no tokens yet
                     Continue Do
 
                 ' String literal
                 ElseIf ch = """"c Then
                     tokens.Add(ReadString())
-                    lastWasNewline = False
+                    lastWasNewline = False : _lineHasToken = True
 
                 ' Number
                 ElseIf Char.IsDigit(ch) Then
                     tokens.Add(ReadNumber())
-                    lastWasNewline = False
+                    lastWasNewline = False : _lineHasToken = True
 
                 ' Equals sign
                 ElseIf ch = "="c Then
                     tokens.Add(MakeTok(TokenType.Equals, "=", _line, _col))
                     Advance()
-                    lastWasNewline = False
+                    lastWasNewline = False : _lineHasToken = True
 
                 ' Dot (FORMAT terminator)
                 ElseIf ch = "."c Then
                     tokens.Add(MakeTok(TokenType.Dot, ".", _line, _col))
                     Advance()
-                    lastWasNewline = False
+                    lastWasNewline = False : _lineHasToken = True
 
                 ' Backslash and forward-slash — significant inside FORMAT masks (e.g. 99\/99\/9999)
                 ElseIf ch = "\"c OrElse ch = "/"c Then
                     tokens.Add(MakeTok(TokenType.Identifier, ch.ToString(), _line, _col))
                     Advance()
-                    lastWasNewline = False
+                    lastWasNewline = False : _lineHasToken = True
+
+                ' Arithmetic operators used in VALIDATE-SECTION expressions.
+                ' + and * are only reached here when _lineHasToken is True (i.e. mid-line),
+                ' because a leading * is caught above as a comment.
+                ElseIf ch = "+"c OrElse ch = "*"c Then
+                    tokens.Add(MakeTok(TokenType.Identifier, ch.ToString(), _line, _col))
+                    Advance()
+                    lastWasNewline = False : _lineHasToken = True
 
                 ' Word (keyword or identifier)
                 ElseIf Char.IsLetter(ch) OrElse ch = "-"c OrElse ch = "_"c Then
                     tokens.Add(ReadWord())
-                    lastWasNewline = False
+                    lastWasNewline = False : _lineHasToken = True
 
                 Else
                     ' Skip unrecognised characters

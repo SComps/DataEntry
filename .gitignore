@@ -361,3 +361,7 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# Generated sample application output (produced by DataEntry --build on Samples/*.def)
+src/DataEntry.Tests/Samples/customer/
+src/DataEntry.Tests/Samples/inventory/
+src/DataEntry.Tests/Samples/timesheet/

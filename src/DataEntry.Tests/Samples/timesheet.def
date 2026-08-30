@@ -55,9 +55,9 @@ SCREEN TIMESHEET-ENTRY FG=White BG=DarkGreen
     * ── Title banner ────────────────────────────────────────────────────────
     PROMPT "╔══════════════════════════════════════════════════════════════════╗" ROW=1 COL=7
         COLOR=WhiteOnDarkGreen
-    PROMPT "║              EMPLOYEE TIMESHEET SYSTEM          (1 of 2)        ║" ROW=2 COL=7
+    PROMPT "║              EMPLOYEE TIMESHEET SYSTEM           (1 of 2)        ║" ROW=2 COL=7
         COLOR=BrightYellowOnDarkGreen
-    PROMPT "║                Employee & Job Identification                    ║" ROW=3 COL=7
+    PROMPT "║                Employee & Job Identification                     ║" ROW=3 COL=7
         COLOR=WhiteOnDarkGreen
     PROMPT "╚══════════════════════════════════════════════════════════════════╝" ROW=4 COL=7
         COLOR=WhiteOnDarkGreen
@@ -71,7 +71,7 @@ SCREEN TIMESHEET-ENTRY FG=White BG=DarkGreen
         COLOR=WhiteOnDarkGreen
     FIELD ROW=8 COL=22 LEN=6 INTO TIMESHEET.EMPID VALIDATE WITH CHECKEMPID
         NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
-    PROMPT "└───────────────────────────────────────────────────────────────────┘" ROW=9 COL=6
+    PROMPT "└────────────────────────────────────────────────────────────────────┘" ROW=9 COL=6
         COLOR=CyanOnDarkGreen
 
     * ── Week & job panel ─────────────────────────────────────────────────────
@@ -87,7 +87,7 @@ SCREEN TIMESHEET-ENTRY FG=White BG=DarkGreen
         COLOR=WhiteOnDarkGreen
     FIELD ROW=13 COL=22 LEN=5 INTO TIMESHEET.JOBCODE VALIDATE WITH CHECKJOBCODE
         NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
-    PROMPT "└───────────────────────────────────────────────────────────────────┘" ROW=14 COL=6
+    PROMPT "└────────────────────────────────────────────────────────────────────┘" ROW=14 COL=6
         COLOR=CyanOnDarkGreen
 
     PROMPT "  Press PgDn to continue to daily hours entry ▶" ROW=16 COL=16
@@ -101,9 +101,9 @@ SCREEN HOURS-ENTRY FG=White BG=DarkGreen
     * ── Title banner ────────────────────────────────────────────────────────
     PROMPT "╔══════════════════════════════════════════════════════════════════╗" ROW=1 COL=7
         COLOR=WhiteOnDarkGreen
-    PROMPT "║              EMPLOYEE TIMESHEET SYSTEM          (2 of 2)        ║" ROW=2 COL=7
+    PROMPT "║              EMPLOYEE TIMESHEET SYSTEM           (2 of 2)        ║" ROW=2 COL=7
         COLOR=BrightYellowOnDarkGreen
-    PROMPT "║                   Daily Hours Entry                             ║" ROW=3 COL=7
+    PROMPT "║                   Daily Hours Entry                              ║" ROW=3 COL=7
         COLOR=WhiteOnDarkGreen
     PROMPT "╚══════════════════════════════════════════════════════════════════╝" ROW=4 COL=7
         COLOR=WhiteOnDarkGreen
@@ -141,7 +141,7 @@ SCREEN HOURS-ENTRY FG=White BG=DarkGreen
         COLOR=WhiteOnDarkGreen
     FIELD ROW=14 COL=20 LEN=5 INTO TIMESHEET.SUN VALIDATE WITH CHECKHOURS
         NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
-    PROMPT "└───────────────────────────────────────────────────────────────────┘" ROW=15 COL=6
+    PROMPT "└────────────────────────────────────────────────────────────────────┘" ROW=15 COL=6
         COLOR=CyanOnDarkGreen
 
     * ── Summary & approval panel ─────────────────────────────────────────────
@@ -161,7 +161,7 @@ SCREEN HOURS-ENTRY FG=White BG=DarkGreen
         COLOR=WhiteOnDarkGreen
     FIELD ROW=19 COL=22 LEN=12 INTO TIMESHEET.NOTES
         NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
-    PROMPT "└───────────────────────────────────────────────────────────────────┘" ROW=20 COL=6
+    PROMPT "└────────────────────────────────────────────────────────────────────┘" ROW=20 COL=6
         COLOR=CyanOnDarkGreen
 
 VALIDATE-SECTION

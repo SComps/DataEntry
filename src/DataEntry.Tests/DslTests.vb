@@ -1765,4 +1765,366 @@ Namespace DataEntry.Tests
     End Class
 
 
+    ' ─────────────────────────────────────────────────────────────────────────
+    ' ScreenSwitchingCodeGenTests — single-screen forms must not gain multi-screen
+    ' plumbing; multi-screen forms must generate proper show/hide logic and
+    ' PgUp/PgDn key handling.
+    ' ─────────────────────────────────────────────────────────────────────────
+    Public Class ScreenSwitchingCodeGenTests
+
+        ' ── Shared DSL helpers ────────────────────────────────────────────────
+
+        Private Shared Function OneScreenDsl() As String
+            Return "DATA-SECTION" & vbCrLf &
+                   "    FILE single.dat APPEND LRECL=20 LEND=CRLF" & vbCrLf &
+                   "RECORD R" & vbCrLf &
+                   "    F1 LEN=10" & vbCrLf &
+                   "    FORMAT=XXXXXXXXXX." & vbCrLf &
+                   "    F2 LEN=10" & vbCrLf &
+                   "    FORMAT=XXXXXXXXXX." & vbCrLf &
+                   "SCREEN-SECTION" & vbCrLf &
+                   "SCREEN ONLY-SCREEN FG=White BG=Blue" & vbCrLf &
+                   "    PROMPT ""Name:"" ROW=1 COL=1" & vbCrLf &
+                   "        COLOR=WhiteOnBlue" & vbCrLf &
+                   "    FIELD ROW=1 COL=8 LEN=10 INTO R.F1" & vbCrLf &
+                   "        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed" & vbCrLf &
+                   "    FIELD ROW=2 COL=8 LEN=10 INTO R.F2" & vbCrLf &
+                   "        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed"
+        End Function
+
+        Private Shared Function TwoScreenDsl() As String
+            Return "DATA-SECTION" & vbCrLf &
+                   "    FILE multi.dat APPEND LRECL=20 LEND=CRLF" & vbCrLf &
+                   "RECORD R" & vbCrLf &
+                   "    F1 LEN=10" & vbCrLf &
+                   "    FORMAT=XXXXXXXXXX." & vbCrLf &
+                   "    F2 LEN=10" & vbCrLf &
+                   "    FORMAT=XXXXXXXXXX." & vbCrLf &
+                   "SCREEN-SECTION" & vbCrLf &
+                   "SCREEN SCREEN-ONE FG=White BG=Blue" & vbCrLf &
+                   "    PROMPT ""Page 1:"" ROW=1 COL=1" & vbCrLf &
+                   "        COLOR=WhiteOnBlue" & vbCrLf &
+                   "    FIELD ROW=1 COL=10 LEN=10 INTO R.F1" & vbCrLf &
+                   "        NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed" & vbCrLf &
+                   "SCREEN SCREEN-TWO FG=White BG=DarkGreen" & vbCrLf &
+                   "    PROMPT ""Page 2:"" ROW=1 COL=1" & vbCrLf &
+                   "        COLOR=WhiteOnDarkGreen" & vbCrLf &
+                   "    FIELD ROW=1 COL=10 LEN=10 INTO R.F2" & vbCrLf &
+                   "        NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed"
+        End Function
+
+        ' ── Single-screen: no spurious multi-screen fields ────────────────────
+
+        <Fact>
+        Public Sub SingleScreen_NoScreenIndexField()
+            ' A single-screen form still emits _screenIndex but it must start at 0
+            ' and no PgUp/PgDn screen-switching code should be present.
+            Dim result = ParseDsl(OneScreenDsl())
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_ss1_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+
+                ' _screenIndex must be declared (always present)
+                Assert.Contains("_screenIndex As Integer = 0", content)
+                ' No PgDn screen-switch handler emitted for a single-screen form
+                Assert.DoesNotContain("ShowScreen(_screenIndex + 1)", content)
+                Assert.DoesNotContain("ShowScreen(_screenIndex - 1)", content)
+                ' ShowScreen method itself should NOT be present for single-screen forms
+                Assert.DoesNotContain("Private Sub ShowScreen(", content)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        <Fact>
+        Public Sub SingleScreen_NoPgUpPgDnKeyHandling()
+            ' PgDown/PgUp key-handling text for screen switching must be absent.
+            Dim result = ParseDsl(OneScreenDsl())
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_ss2_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+
+                Assert.DoesNotContain("PgDn (unshifted) = next screen", content)
+                Assert.DoesNotContain("Key.PageDown AndAlso Not e.IsShift", content)
+                Assert.DoesNotContain("Key.PageUp AndAlso Not e.IsShift", content)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        <Fact>
+        Public Sub SingleScreen_OnlyOneScreenViews()
+            ' The _screenViews array must be sized for exactly 1 screen (index 0 only).
+            Dim result = ParseDsl(OneScreenDsl())
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_ss3_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+
+                ' Array declared as (0) — one element, index 0
+                Assert.Contains("_screenViews(0) As List(Of View)", content)
+                ' No second-screen list
+                Assert.DoesNotContain("_screenViews(1)", content)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        <Fact>
+        Public Sub SingleScreen_AllFieldsInScreenFields0()
+            ' Both editable fields must end up in _screenFields0 (no _screenFields1).
+            Dim result = ParseDsl(OneScreenDsl())
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_ss4_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+
+                Assert.Contains("_screenFields0", content)
+                Assert.DoesNotContain("_screenFields1", content)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        <Fact>
+        Public Sub SingleScreen_NoVisibleFalseHide()
+            ' With only one screen there is nothing to hide — no Visible = False lines.
+            Dim result = ParseDsl(OneScreenDsl())
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_ss5_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+
+                Assert.DoesNotContain("v.Visible = False", content)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        <Fact>
+        Public Sub SingleScreen_HelpTextDoesNotMentionPageNav()
+            ' Help text for screen-page navigation must not appear on single-screen forms.
+            Dim result = ParseDsl(OneScreenDsl())
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_ss6_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+
+                Assert.DoesNotContain("Go to next screen", content)
+                Assert.DoesNotContain("Go to previous screen", content)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        ' ── Multi-screen: correct show/hide and key handling ──────────────────
+
+        <Fact>
+        Public Sub MultiScreen_ShowScreenMethodPresent()
+            Dim result = ParseDsl(TwoScreenDsl())
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_ms1_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+
+                Assert.Contains("Private Sub ShowScreen(", content)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        <Fact>
+        Public Sub MultiScreen_PgDnPgUpKeyHandlersPresent()
+            Dim result = ParseDsl(TwoScreenDsl())
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_ms2_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+
+                Assert.Contains("Key.PageDown AndAlso Not e.IsShift", content)
+                Assert.Contains("ShowScreen(_screenIndex + 1)", content)
+                Assert.Contains("Key.PageUp AndAlso Not e.IsShift", content)
+                Assert.Contains("ShowScreen(_screenIndex - 1)", content)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        <Fact>
+        Public Sub MultiScreen_Screen1HiddenOnStartup()
+            ' Screen index 1 views must be hidden (Visible = False) during BuildForm.
+            Dim result = ParseDsl(TwoScreenDsl())
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_ms3_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+
+                ' The hide block must reference _screenViews(1) and set Visible = False
+                Assert.Contains("_screenViews(1)", content)
+                Assert.Contains("v.Visible = False", content)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        <Fact>
+        Public Sub MultiScreen_BothScreenViewListsPopulated()
+            ' Every prompt and field must be registered with its screen's _screenViews list.
+            Dim result = ParseDsl(TwoScreenDsl())
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_ms4_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+
+                Assert.Contains("_screenViews(0).Add(", content)
+                Assert.Contains("_screenViews(1).Add(", content)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        <Fact>
+        Public Sub MultiScreen_FieldsPartitionedByScreen()
+            ' Fields from each screen must be registered to their respective _screenFieldsN list.
+            Dim result = ParseDsl(TwoScreenDsl())
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_ms5_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+
+                Assert.Contains("_screenFields0.Add(", content)
+                Assert.Contains("_screenFields1.Add(", content)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        <Fact>
+        Public Sub MultiScreen_InitialTitleIsScreenZero()
+            ' BuildForm must set Me.Title to screen 0's name, not screen 1's.
+            Dim result = ParseDsl(TwoScreenDsl())
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_ms6_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+
+                ' Title constant for screen 0 must be present and hold the correct name.
+                Assert.Contains("_screenTitle0 As String = ""SCREEN-ONE""", content)
+                Assert.Contains("_screenTitle1 As String = ""SCREEN-TWO""", content)
+                ' BuildForm applies screen 0 first (Me.Title = _screenTitle0)
+                Assert.Contains("Me.Title = _screenTitle0", content)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        <Fact>
+        Public Sub MultiScreen_HelpTextMentionsPageNav()
+            ' The generated help text must tell the user about PgDn/PgUp screen navigation.
+            Dim result = ParseDsl(TwoScreenDsl())
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_ms7_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+
+                Assert.Contains("Go to next screen", content)
+                Assert.Contains("Go to previous screen", content)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        <Fact>
+        Public Sub MultiScreen_ShowScreenHidesAllThenShowsTarget()
+            ' ShowScreen must iterate _screenViews for every screen when hiding,
+            ' then iterate once more for the chosen screen when showing.
+            Dim result = ParseDsl(TwoScreenDsl())
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_ms8_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+
+                ' Inside ShowScreen: both screen-view lists iterated for hiding
+                Dim showScreenStart = content.IndexOf("Private Sub ShowScreen(")
+                Assert.True(showScreenStart >= 0, "ShowScreen not found")
+                Dim showScreenBody = content.Substring(showScreenStart)
+                Assert.Contains("v.Visible = True", showScreenBody)
+                Assert.Contains("v.Visible = False", showScreenBody)
+                Assert.Contains("_allFields.Clear()", showScreenBody)
+                Assert.Contains("Me.SetNeedsDisplay()", showScreenBody)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        ' ── Timesheet sample (real .def): end-to-end multi-screen codegen ─────
+
+        <Fact>
+        Public Sub TimesheetSample_MultiScreenCodeGenCorrect()
+            Dim src = LoadSample("timesheet.def")
+            Dim result = ParseDsl(src)
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_ts_ms_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+
+                ' Both screens tracked
+                Assert.Contains("_screenTitle0 As String = ""TIMESHEET-ENTRY""", content)
+                Assert.Contains("_screenTitle1 As String = ""HOURS-ENTRY""", content)
+                ' Starts on screen 0
+                Assert.Contains("Me.Title = _screenTitle0", content)
+                ' Screen 1 hidden at startup
+                Assert.Contains("v.Visible = False", content)
+                ' PgDn/PgUp wired
+                Assert.Contains("ShowScreen(_screenIndex + 1)", content)
+                Assert.Contains("ShowScreen(_screenIndex - 1)", content)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+        ' ── Customer sample (real .def): single-screen, no regressions ────────
+
+        <Fact>
+        Public Sub CustomerSample_SingleScreen_NoMultiScreenPlumbing()
+            Dim src = LoadSample("customer.def")
+            Dim result = ParseDsl(src)
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_cust_ss_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim content = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+
+                ' No ShowScreen, no PgDn screen-nav, no Visible=False hiding
+                Assert.DoesNotContain("Private Sub ShowScreen(", content)
+                Assert.DoesNotContain("ShowScreen(_screenIndex", content)
+                Assert.DoesNotContain("v.Visible = False", content)
+                ' Screen 0 title is set directly
+                Assert.Contains("Me.Title = _screenTitle0", content)
+                Assert.Contains("_screenTitle0 As String = ""CUSTOMER-ENTRY""", content)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
+
+    End Class
+
+
 End Namespace

@@ -35,9 +35,9 @@ SCREEN INVENTORY-ENTRY COLOR=WhiteOnDarkBlue
     * ── Title banner ────────────────────────────────────────────────────────
     PROMPT "╔═══════════════════════════════════════════════════════════════════╗" ROW=1 COL=5
         COLOR=WhiteOnDarkBlue
-    PROMPT "║              INVENTORY MANAGEMENT SYSTEM                         ║" ROW=2 COL=5
+    PROMPT "║              INVENTORY MANAGEMENT SYSTEM                          ║" ROW=2 COL=5
         COLOR=BrightYellowOnDarkBlue
-    PROMPT "║                  Stock Item Entry Form                           ║" ROW=3 COL=5
+    PROMPT "║                  Stock Item Entry Form                            ║" ROW=3 COL=5
         COLOR=WhiteOnDarkBlue
     PROMPT "╚═══════════════════════════════════════════════════════════════════╝" ROW=4 COL=5
         COLOR=WhiteOnDarkBlue
@@ -55,7 +55,7 @@ SCREEN INVENTORY-ENTRY COLOR=WhiteOnDarkBlue
         COLOR=WhiteOnDarkBlue
     FIELD ROW=9 COL=20 LEN=30 INTO ITEM.DESCR VALIDATE WITH CHECKDESCR
         NORMAL=WhiteOnDarkBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
-    PROMPT "└──────────────────────────────────────────────────────────────────┘" ROW=10 COL=4
+    PROMPT "└────────────────────────────────────────────────────────────────────┘" ROW=10 COL=4
         COLOR=CyanOnDarkBlue
 
     * ── Stock levels ─────────────────────────────────────────────────────────
@@ -73,7 +73,7 @@ SCREEN INVENTORY-ENTRY COLOR=WhiteOnDarkBlue
         COLOR=WhiteOnDarkBlue
     FIELD ROW=14 COL=20 LEN=9 INTO ITEM.PRICE VALIDATE WITH CHECKPRICE
         NORMAL=WhiteOnDarkBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
-    PROMPT "└──────────────────────────────────────────────────────────────────┘" ROW=15 COL=4
+    PROMPT "└────────────────────────────────────────────────────────────────────┘" ROW=15 COL=4
         COLOR=CyanOnDarkBlue
 
     * ── Storage & supplier ───────────────────────────────────────────────────
@@ -91,7 +91,7 @@ SCREEN INVENTORY-ENTRY COLOR=WhiteOnDarkBlue
         COLOR=WhiteOnDarkBlue
     FIELD ROW=19 COL=20 LEN=10 INTO ITEM.SUPPLR
         NORMAL=WhiteOnDarkBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
-    PROMPT "└──────────────────────────────────────────────────────────────────┘" ROW=20 COL=4
+    PROMPT "└────────────────────────────────────────────────────────────────────┘" ROW=20 COL=4
         COLOR=CyanOnDarkBlue
 
 VALIDATE-SECTION

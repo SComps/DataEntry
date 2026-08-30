@@ -37,9 +37,9 @@ SCREEN CUSTOMER-ENTRY COLOR=WhiteOnBlue
     * ── Title banner ────────────────────────────────────────────────────────
     PROMPT "╔══════════════════════════════════════════════════════════════════╗" ROW=1 COL=6
         COLOR=WhiteOnBlue
-    PROMPT "║                   CUSTOMER MASTER FILE                          ║" ROW=2 COL=6
+    PROMPT "║                   CUSTOMER MASTER FILE                           ║" ROW=2 COL=6
         COLOR=BrightYellowOnBlue
-    PROMPT "║                  New / Edit Customer Record                     ║" ROW=3 COL=6
+    PROMPT "║                  New / Edit Customer Record                      ║" ROW=3 COL=6
         COLOR=WhiteOnBlue
     PROMPT "╚══════════════════════════════════════════════════════════════════╝" ROW=4 COL=6
         COLOR=WhiteOnBlue
@@ -53,7 +53,7 @@ SCREEN CUSTOMER-ENTRY COLOR=WhiteOnBlue
         COLOR=WhiteOnBlue
     FIELD ROW=8 COL=21 LEN=6 INTO CUSTOMER.CUSTID VALIDATE WITH CHECKCUSTID
         NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
-    PROMPT "└───────────────────────────────────────────────────────────────────┘" ROW=9  COL=5
+    PROMPT "└────────────────────────────────────────────────────────────────────┘" ROW=9  COL=5
         COLOR=CyanOnBlue
 
     * ── Name section ─────────────────────────────────────────────────────────
@@ -65,7 +65,7 @@ SCREEN CUSTOMER-ENTRY COLOR=WhiteOnBlue
     PROMPT "First Name  :" ROW=12 COL=44
     FIELD ROW=12 COL=58 LEN=15 INTO CUSTOMER.FNAME
         NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
-    PROMPT "└───────────────────────────────────────────────────────────────────┘" ROW=13 COL=5
+    PROMPT "└────────────────────────────────────────────────────────────────────┘" ROW=13 COL=5
         COLOR=CyanOnBlue
 
     * ── Address section ──────────────────────────────────────────────────────
@@ -83,7 +83,7 @@ SCREEN CUSTOMER-ENTRY COLOR=WhiteOnBlue
     PROMPT "Zip         :" ROW=18 COL=27
     FIELD ROW=18 COL=41 LEN=5  INTO CUSTOMER.ZIP VALIDATE WITH CHECKZIP
         NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
-    PROMPT "└───────────────────────────────────────────────────────────────────┘" ROW=19 COL=5
+    PROMPT "└────────────────────────────────────────────────────────────────────┘" ROW=19 COL=5
         COLOR=CyanOnBlue
 
     * ── Contact section ──────────────────────────────────────────────────────
@@ -95,7 +95,7 @@ SCREEN CUSTOMER-ENTRY COLOR=WhiteOnBlue
     PROMPT "Email       :" ROW=22 COL=37
     FIELD ROW=22 COL=51 LEN=17 INTO CUSTOMER.EMAIL
         NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
-    PROMPT "└───────────────────────────────────────────────────────────────────┘" ROW=23 COL=5
+    PROMPT "└────────────────────────────────────────────────────────────────────┘" ROW=23 COL=5
         COLOR=CyanOnBlue
 
 VALIDATE-SECTION

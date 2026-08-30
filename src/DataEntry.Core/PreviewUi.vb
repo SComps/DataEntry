@@ -33,18 +33,45 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
 
         Public Sub Run()
             _app = Application.Create().Init()
-            ShowCurrentScreen()
+            ' Loop instead of recursing — each screen switch calls RequestStop(),
+            ' which returns from _app.Run(); we dispose the old window and show the next.
+            Dim keepGoing As Boolean = True
+            Do While keepGoing
+                Dim win As New Window()
+                Try
+                    ShowCurrentScreen(win)
+                    _app.Run(win, Nothing)
+                Finally
+                    RemoveHandler win.KeyDown, AddressOf OnKeyDown
+                    win.Dispose()
+                End Try
+                ' _nextAction is set by key/menu handlers before RequestStop().
+                Select Case _nextAction
+                    Case NextAction.PrevScreen
+                        _screenIndex -= 1
+                        _nextAction = NextAction.None
+                    Case NextAction.NextScreen
+                        _screenIndex += 1
+                        _nextAction = NextAction.None
+                    Case Else
+                        keepGoing = False
+                End Select
+            Loop
             _app.Dispose()
         End Sub
 
+        Private Enum NextAction
+            None
+            PrevScreen
+            NextScreen
+        End Enum
+        Private _nextAction As NextAction = NextAction.None
+
         ' ── Screen rendering ──────────────────────────────────────────────────
 
-        Private Sub ShowCurrentScreen()
+        Private Sub ShowCurrentScreen(win As Window)
             Dim scr = If(_screens.Count > 0, _screens(_screenIndex), Nothing)
-            Dim title = If(scr IsNot Nothing, $"Preview: {scr.Name}", "Preview — no screens defined")
-
-            Dim win As New Window()
-            win.Title  = title
+            win.Title  = If(scr IsNot Nothing, $"Preview: {scr.Name}", "Preview — no screens defined")
             win.X      = 0
             win.Y      = 0
             win.Width  = TDim.Fill()
@@ -67,8 +94,6 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
             End If
 
             AddHandler win.KeyDown, AddressOf OnKeyDown
-
-            _app.Run(win, Nothing)
         End Sub
 
         Private _allFields As New List(Of TextField)
@@ -251,9 +276,8 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
 
             If e = Key.PageUp AndAlso Not e.IsShift Then
                 If _screenIndex > 0 Then
-                    _screenIndex -= 1
+                    _nextAction = NextAction.PrevScreen
                     _app.RequestStop()
-                    ShowCurrentScreen()
                 End If
                 e.Handled = True
                 Return
@@ -261,9 +285,8 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
 
             If e = Key.PageDown AndAlso Not e.IsShift Then
                 If _screenIndex < _screens.Count - 1 Then
-                    _screenIndex += 1
+                    _nextAction = NextAction.NextScreen
                     _app.RequestStop()
-                    ShowCurrentScreen()
                 End If
                 e.Handled = True
                 Return
@@ -335,6 +358,9 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
                     Dim validator As New DslValidator(newDoc)
                     Dim valErrs = validator.Validate()
 
+                    ' Signal the Run() loop to exit cleanly, then launch the new UI
+                    ' after the current app has fully stopped — no nested IApplication.
+                    _nextAction = NextAction.None
                     _app.RequestStop()
 
                     If parser.Errors.Count > 0 OrElse valErrs.Exists(Function(x) x.Severity = "Error") Then

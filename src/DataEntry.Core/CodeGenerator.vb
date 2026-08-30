@@ -363,6 +363,20 @@ Imports System.Collections.Generic
             sb.AppendLine("        Private _records As List(Of String)")
             sb.AppendLine("        Private _allFields As New List(Of TextField)")
             sb.AppendLine("        Private _statusLabel As Label")
+            Dim screenCount = doc.Screens.Count
+            sb.AppendLine($"        Private _screenIndex As Integer = 0")
+            sb.AppendLine($"        Private _screenViews({Math.Max(screenCount - 1, 0)}) As List(Of View)")
+            ' Per-screen field lists (for rebuilding _allFields on screen switch)
+            For si = 0 To screenCount - 1
+                sb.AppendLine($"        Private _screenFields{si} As New List(Of TextField)")
+            Next
+            ' Per-screen title and scheme info (baked in at codegen time)
+            For si = 0 To screenCount - 1
+                Dim scrI = doc.Screens(si)
+                sb.AppendLine($"        Private ReadOnly _screenTitle{si} As String = ""{EscapeString(scrI.Name)}""")
+                sb.AppendLine($"        Private ReadOnly _screenFg{si} As String = ""{scrI.DefaultColor.Fg}""")
+                sb.AppendLine($"        Private ReadOnly _screenBg{si} As String = ""{scrI.DefaultColor.Bg}""")
+            Next
             sb.AppendLine()
             sb.AppendLine("        Public Sub New(app As IApplication)")
             sb.AppendLine("            _app = app")
@@ -372,25 +386,19 @@ Imports System.Collections.Generic
             sb.AppendLine()
             sb.AppendLine("        Private Sub BuildForm()")
 
-            ' Screen layout
+            ' Screen layout — only the very last field across ALL screens auto-saves on fill.
             Dim totalFieldCount = 0
             For Each scr In doc.Screens
                 totalFieldCount += scr.Fields.Count
             Next
 
             Dim varIdx = 0
+            Dim scrIdx = 0
             For Each scr In doc.Screens
                 Dim nfgScr = scr.DefaultColor.Fg
                 Dim nbgScr = scr.DefaultColor.Bg
-                sb.AppendLine($"            ' Screen: {scr.Name}")
-                sb.AppendLine($"            Me.Title = ""{EscapeString(scr.Name)}""")
-                sb.AppendLine($"            Me.SetScheme(New Scheme With {{")
-                sb.AppendLine($"                .Normal    = ColorHelper.MakeAttr(""{nfgScr}"", ""{nbgScr}""),")
-                sb.AppendLine($"                .Focus     = ColorHelper.MakeAttr(""Black"", ""Cyan""),")
-                sb.AppendLine($"                .Editable  = ColorHelper.MakeAttr(""Black"", ""Cyan""),")
-                sb.AppendLine($"                .HotNormal = ColorHelper.MakeAttr(""{nfgScr}"", ""{nbgScr}""),")
-                sb.AppendLine($"                .HotFocus  = ColorHelper.MakeAttr(""Black"", ""Cyan"")")
-                sb.AppendLine($"            }})")
+                sb.AppendLine($"            ' ── Screen {scrIdx}: {scr.Name} ─────────────────────")
+                sb.AppendLine($"            _screenViews({scrIdx}) = New List(Of View)()")
                 sb.AppendLine()
 
                 ' Standalone prompts
@@ -416,12 +424,13 @@ Imports System.Collections.Generic
                         sb.AppendLine($"            }})")
                     End If
                     sb.AppendLine($"            Me.Add({pVar})")
+                    sb.AppendLine($"            _screenViews({scrIdx}).Add({pVar})")
                 Next
 
                 For Each sfld In scr.Fields
                     Dim vn = fieldVars(varIdx)
                     varIdx += 1
-                    Dim isLastField = (varIdx = totalFieldCount)
+                    Dim isLastField = (varIdx = totalFieldCount)  ' only the very last field across all screens auto-saves
                     Dim nfg = If(sfld.NormalColor IsNot Nothing, sfld.NormalColor.Fg, scr.DefaultColor.Fg)
                     Dim nbg = If(sfld.NormalColor IsNot Nothing, sfld.NormalColor.Bg, scr.DefaultColor.Bg)
                     Dim ffg = If(sfld.FocusColor IsNot Nothing, sfld.FocusColor.Fg, "Black")
@@ -479,11 +488,12 @@ Imports System.Collections.Generic
                     sb.AppendLine($"                .HotFocus  = ColorHelper.MakeAttr(""{ffg}"", ""{fbg}"")")
                     sb.AppendLine($"            }})")
                     sb.AppendLine($"            Me.Add({vn})")
+                    sb.AppendLine($"            _screenViews({scrIdx}).Add({vn})")
                     If sfld.IsProtected Then
                         sb.AppendLine($"            {vn}.ReadOnly = True")
                         sb.AppendLine($"            {vn}.TabStop  = False")
                     Else
-                        sb.AppendLine($"            _allFields.Add({vn})")
+                        sb.AppendLine($"            _screenFields{scrIdx}.Add({vn})")
                         sb.AppendLine($"            AddHandler {vn}.KeyDown, AddressOf OnKeyDown")
                     End If
 
@@ -505,6 +515,7 @@ Imports System.Collections.Generic
                         sb.AppendLine($"                .HotFocus  = ColorHelper.MakeAttr(""DarkGray"", ""{EscapeString(nbg)}"")")
                         sb.AppendLine($"            }})")
                         sb.AppendLine($"            Me.Add({hintVar})")
+                        sb.AppendLine($"            _screenViews({scrIdx}).Add({hintVar})")
                     End If
 
                     If Not sfld.IsProtected Then
@@ -660,7 +671,29 @@ Imports System.Collections.Generic
 
                     sb.AppendLine()
                 Next
+                scrIdx += 1
             Next
+
+            ' After building all screens, hide screens 1+ (screen 0 is visible by default).
+            For si = 1 To screenCount - 1
+                sb.AppendLine($"            ' Hide screen {si} until PgDn switches to it.")
+                sb.AppendLine($"            For Each v In _screenViews({si})")
+                sb.AppendLine($"                v.Visible = False")
+                sb.AppendLine($"            Next")
+            Next
+
+            ' Set initial title, scheme and _allFields from screen 0.
+            If screenCount > 0 Then
+                sb.AppendLine($"            Me.Title = _screenTitle0")
+                sb.AppendLine($"            Me.SetScheme(New Scheme With {{")
+                sb.AppendLine($"                .Normal    = ColorHelper.MakeAttr(_screenFg0, _screenBg0),")
+                sb.AppendLine($"                .Focus     = ColorHelper.MakeAttr(""Black"", ""Cyan""),")
+                sb.AppendLine($"                .Editable  = ColorHelper.MakeAttr(""Black"", ""Cyan""),")
+                sb.AppendLine($"                .HotNormal = ColorHelper.MakeAttr(_screenFg0, _screenBg0),")
+                sb.AppendLine($"                .HotFocus  = ColorHelper.MakeAttr(""Black"", ""Cyan"")")
+                sb.AppendLine($"            }})")
+                sb.AppendLine($"            _allFields.AddRange(_screenFields0)")
+            End If
 
             ' Status label — shown at row 25 (below the 24-row screen area) for validation messages.
             sb.AppendLine("            _statusLabel = New Label()")
@@ -673,6 +706,45 @@ Imports System.Collections.Generic
             sb.AppendLine("            AddHandler Me.KeyDown, AddressOf OnKeyDown")
             sb.AppendLine("        End Sub")
             sb.AppendLine()
+
+            ' ShowScreen — only needed (and emitted) when the form has multiple screens.
+            If screenCount > 1 Then
+                sb.AppendLine("        Private Sub ShowScreen(idx As Integer)")
+                sb.AppendLine($"            If idx < 0 OrElse idx >= {screenCount} Then Return")
+                sb.AppendLine("            ' Hide all screen views.")
+                For si = 0 To screenCount - 1
+                    sb.AppendLine($"            For Each v In _screenViews({si})")
+                    sb.AppendLine($"                v.Visible = False")
+                    sb.AppendLine($"            Next")
+                Next
+                sb.AppendLine("            ' Show the requested screen's views.")
+                sb.AppendLine("            For Each v In _screenViews(idx)")
+                sb.AppendLine("                v.Visible = True")
+                sb.AppendLine("            Next")
+                sb.AppendLine("            _screenIndex = idx")
+                sb.AppendLine("            ' Update title and colour scheme.")
+                ' Build a Select Case for title/scheme by screen index
+                sb.AppendLine("            Select Case idx")
+                For si = 0 To screenCount - 1
+                    sb.AppendLine($"                Case {si}")
+                    sb.AppendLine($"                    Me.Title = _screenTitle{si}")
+                    sb.AppendLine($"                    Me.SetScheme(New Scheme With {{")
+                    sb.AppendLine($"                        .Normal    = ColorHelper.MakeAttr(_screenFg{si}, _screenBg{si}),")
+                    sb.AppendLine($"                        .Focus     = ColorHelper.MakeAttr(""Black"", ""Cyan""),")
+                    sb.AppendLine($"                        .Editable  = ColorHelper.MakeAttr(""Black"", ""Cyan""),")
+                    sb.AppendLine($"                        .HotNormal = ColorHelper.MakeAttr(_screenFg{si}, _screenBg{si}),")
+                    sb.AppendLine($"                        .HotFocus  = ColorHelper.MakeAttr(""Black"", ""Cyan"")")
+                    sb.AppendLine($"                    }})")
+                    sb.AppendLine($"                    _allFields.Clear()")
+                    sb.AppendLine($"                    _allFields.AddRange(_screenFields{si})")
+                Next
+                sb.AppendLine("            End Select")
+                sb.AppendLine("            ' Move focus to first field of new screen.")
+                sb.AppendLine("            If _allFields.Count > 0 Then _allFields(0).SetFocus()")
+                sb.AppendLine("            Me.SetNeedsDraw()")
+                sb.AppendLine("        End Sub")
+                sb.AppendLine()
+            End If
 
             ' Save handler — collects field values and writes a record.
             ' Uses a fixed-width char buffer pre-filled with spaces so that dead space
@@ -747,6 +819,20 @@ Imports System.Collections.Generic
             sb.AppendLine("                e.Handled = True")
             sb.AppendLine("                Return")
             sb.AppendLine("            End If")
+            ' Only emit PgUp/PgDn screen-switching when there are multiple screens.
+            If screenCount > 1 Then
+                sb.AppendLine("            ' PgDn (unshifted) = next screen, PgUp (unshifted) = previous screen")
+                sb.AppendLine("            If e = Key.PageDown AndAlso Not e.IsShift Then")
+                sb.AppendLine($"                If _screenIndex < {screenCount - 1} Then ShowScreen(_screenIndex + 1)")
+                sb.AppendLine("                e.Handled = True")
+                sb.AppendLine("                Return")
+                sb.AppendLine("            End If")
+                sb.AppendLine("            If e = Key.PageUp AndAlso Not e.IsShift Then")
+                sb.AppendLine("                If _screenIndex > 0 Then ShowScreen(_screenIndex - 1)")
+                sb.AppendLine("                e.Handled = True")
+                sb.AppendLine("                Return")
+                sb.AppendLine("            End If")
+            End If
             sb.AppendLine("            ' Shift + PgUp/PgDn/Home/End = record navigation")
             sb.AppendLine("            If e.IsShift Then")
             sb.AppendLine("                Dim base_ = e.NoShift")
@@ -779,6 +865,10 @@ Imports System.Collections.Generic
             sb.AppendLine("                          ""  F1               - Show this Help screen"" & vbCrLf & _")
             sb.AppendLine("                          ""  F3               - Cancel / Clear fields"" & vbCrLf & _")
             sb.AppendLine("                          ""  F10              - Quit application"" & vbCrLf & _")
+            If screenCount > 1 Then
+                sb.AppendLine("                          ""  PageDown         - Go to next screen"" & vbCrLf & _")
+                sb.AppendLine("                          ""  PageUp           - Go to previous screen"" & vbCrLf & _")
+            End If
             sb.AppendLine("                          ""  Shift + PageUp   - Go to previous record"" & vbCrLf & _")
             sb.AppendLine("                          ""  Shift + PageDown - Go to next record"" & vbCrLf & _")
             sb.AppendLine("                          ""  Shift + Home     - Go to first record"" & vbCrLf & _")

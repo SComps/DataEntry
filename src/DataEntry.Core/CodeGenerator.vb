@@ -590,7 +590,8 @@ Imports System.Collections.Generic
                         Dim ffg2 = If(sfld.FocusColor IsNot Nothing, sfld.FocusColor.Fg, "Black")
                         Dim fbg2 = If(sfld.FocusColor IsNot Nothing, sfld.FocusColor.Bg, "Cyan")
 
-                        sb.AppendLine($"            AddHandler {vn}.Leave, Sub(sender As Object, ev As EventArgs)")
+                        sb.AppendLine($"            AddHandler {vn}.HasFocusChanging, Sub(sender As Object, ev As CancelEventArgs(Of Boolean))")
+                        sb.AppendLine($"                If ev.NewValue Then Return  ' gaining focus — nothing to validate yet")
                         sb.AppendLine($"                Dim fld = DirectCast(sender, TextField)")
                         sb.AppendLine($"                Dim fieldVal = If(fld.Text, """")")
 
@@ -629,8 +630,7 @@ Imports System.Collections.Generic
                         sb.AppendLine($"                        .HotFocus  = ColorHelper.MakeAttr(""{efg}"", ""{ebg}"")")
                         sb.AppendLine($"                    }})")
                         sb.AppendLine($"                    If _statusLabel IsNot Nothing Then _statusLabel.Text = If(TypeOf vResult Is String, vResult.ToString(), ""Invalid value — please re-enter."")")
-                        sb.AppendLine($"                    ev.Handled = True")
-                        sb.AppendLine($"                    fld.SetFocus()")
+                        sb.AppendLine($"                    ev.Cancel = True  ' keep focus on this field")
                         sb.AppendLine($"                ElseIf vStr IsNot Nothing Then")
                         sb.AppendLine($"                    ' String result — replace field value.")
                         sb.AppendLine($"                    fld.Text = vStr")
@@ -679,7 +679,7 @@ Imports System.Collections.Generic
             ' (gaps between fields with explicit START= positions) is preserved correctly.
             sb.AppendLine("        ' Collect all field values, format them, and write to the data file.")
             sb.AppendLine("        Private Sub SaveRecord()")
-            sb.AppendLine("            Dim buf(Lrecl - 1) As Char")
+            sb.AppendLine($"            Dim buf({doc.Data.Lrecl - 1}) As Char")
             sb.AppendLine("            Array.Fill(buf, "" ""c)")
             varIdx = 0
             For Each scr In doc.Screens

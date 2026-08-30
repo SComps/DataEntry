@@ -961,6 +961,33 @@ Namespace DataEntry.Tests
                 If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
             End Try
         End Sub
+
+        <Fact>
+        Public Sub CodeGen_MainForm_BufUsesInlineLrecl_NotSymbol()
+            ' Regression: Lrecl is Private in DataFile — MainForm must use the numeric
+            ' value directly in "Dim buf(N) As Char", never the bare name "Lrecl".
+            Dim dsl = "DATA-SECTION" & vbCrLf &
+                      "    FILE out.dat APPEND LRECL=50 LEND=CRLF" & vbCrLf &
+                      "RECORD R" & vbCrLf &
+                      "    F1 LEN=50" & vbCrLf &
+                      "    FORMAT=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX." & vbCrLf &
+                      "SCREEN-SECTION" & vbCrLf &
+                      "SCREEN S" & vbCrLf &
+                      "    FIELD ""F1"" ROW=1 COL=1 LEN=50 INTO R.F1"
+            Dim result = ParseDsl(dsl)
+            Dim outDir = IO.Path.Combine(IO.Path.GetTempPath(), $"cg_buf_{Guid.NewGuid():N}")
+            Try
+                Dim gen As New CodeGenerator()
+                gen.GenerateProject(result.Doc, outDir)
+                Dim mfContent = File.ReadAllText(IO.Path.Combine(outDir, "MainForm.vb"))
+                ' Must contain the inline integer (LRECL=50, so index = 49).
+                Assert.Contains("Dim buf(49) As Char", mfContent)
+                ' Must NOT contain the bare Lrecl symbol — it lives in a different class.
+                Assert.DoesNotContain("Dim buf(Lrecl", mfContent)
+            Finally
+                If Directory.Exists(outDir) Then Directory.Delete(outDir, True)
+            End Try
+        End Sub
     End Class
 
     ' ─────────────────────────────────────────────────────────────────────────

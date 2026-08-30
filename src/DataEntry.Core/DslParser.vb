@@ -706,11 +706,23 @@ Imports System.Collections.Generic
                 If expectOperand Then
                     ' Expect a field name (Identifier or VALUE keyword) or a number.
                     If t.Type = TokenType.Number Then
+                        Consume()
+                        Dim numVal = t.Value
+                        ' Allow decimal fraction: peek for Dot + Number (e.g. 0.1)
+                        If Not AtLineEnd() AndAlso Not AtEof() AndAlso Current().Type = TokenType.Dot Then
+                            Dim savedPos = _pos
+                            Consume()  ' consume dot
+                            If Not AtLineEnd() AndAlso Not AtEof() AndAlso Current().Type = TokenType.Number Then
+                                numVal = numVal & "." & Current().Value
+                                Consume()  ' consume fractional digits
+                            Else
+                                _pos = savedPos  ' no fraction — put dot back
+                            End If
+                        End If
                         tokens.Add(New ExprToken With {
                             .Kind = ExprToken.ExprTokenKind.Number,
-                            .Value = t.Value
+                            .Value = numVal
                         })
-                        Consume()
                         expectOperand = False
                     ElseIf t.Type = TokenType.Identifier OrElse
                            (t.Type = TokenType.Keyword AndAlso

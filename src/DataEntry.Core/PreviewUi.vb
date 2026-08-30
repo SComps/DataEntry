@@ -22,6 +22,7 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
         Private _screens As List(Of ScreenSection)
         Private _screenIndex As Integer = 0
         Private _app As IApplication
+        Private _menuBar As MenuBar
 
         Public Sub New(doc As DslDocument, defFile As String, outputDir As String)
             _doc = doc
@@ -58,8 +59,8 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
             Dim buildItem   As New MenuItem("_Compile && Build","", AddressOf MenuBuild)
             Dim quitItem    As New MenuItem("_Quit",            "", Sub() _app.RequestStop())
             Dim fileMenu    As New MenuBarItem("_File", New MenuItem() {openItem, buildItem, quitItem})
-            Dim menuBar     As New MenuBar(New MenuBarItem() {fileMenu})
-            win.Add(menuBar)
+            _menuBar        =  New MenuBar(New MenuBarItem() {fileMenu})
+            win.Add(_menuBar)
 
             If scr IsNot Nothing Then
                 BuildFields(win, scr, _doc)
@@ -221,6 +222,13 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
         ' ── Key handling ──────────────────────────────────────────────────────
 
         Private Sub OnKeyDown(sender As Object, e As Key)
+            ' F9 — activate the menu bar (fallback for macOS/QEMU where Alt is not delivered)
+            If e = Key.F9 Then
+                _menuBar.SetFocus()
+                e.Handled = True
+                Return
+            End If
+
             If e = Key.F1 Then
                 ShowHelp()
                 e.Handled = True
@@ -370,6 +378,7 @@ Imports TPos = Terminal.Gui.ViewBase.Pos
                           "  Ctrl+S           - Save record (preview mode)" & vbCrLf &
                           "  F1               - Show this Help screen" & vbCrLf &
                           "  F3               - Cancel / Clear fields" & vbCrLf &
+                          "  F9               - Open File menu (Alt+F on most platforms)" & vbCrLf &
                           "  F10              - Compile & Build application" & vbCrLf &
                           "  PageUp / PageDown- Switch screen section" & vbCrLf &
                           "  Shift + PageUp   - Simulate previous record" & vbCrLf &

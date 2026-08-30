@@ -8,6 +8,10 @@
 *   Multi-screen form (PageUp / PageDown to switch screens)
 *   Escaped literal in FORMAT mask  (99\/99\/9999 — date with slashes)
 *   ZeroFill (Z) mask for numeric hours and totals
+*   NOT EMPTY rule  — employee ID and week-ending date are required
+*   VALUE IS BETWEEN rule  — individual day hours must be 0–24
+*   ASSIGN rule  — TOTALS auto-calculated as sum of all seven daily fields
+*   MESSAGE clause  — custom error text shown in status bar
 * ─────────────────────────────────────────────────────────────────────────────
 
 DATA-SECTION
@@ -65,7 +69,7 @@ SCREEN TIMESHEET-ENTRY FG=White BG=DarkGreen
         COLOR=CyanOnDarkGreen
     PROMPT "Employee ID :" ROW=8 COL=8
         COLOR=WhiteOnDarkGreen
-    FIELD ROW=8 COL=22 LEN=6 INTO TIMESHEET.EMPID
+    FIELD ROW=8 COL=22 LEN=6 INTO TIMESHEET.EMPID VALIDATE WITH CHECKEMPID
         NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
     PROMPT "└───────────────────────────────────────────────────────────────────┘" ROW=9 COL=6
         COLOR=CyanOnDarkGreen
@@ -75,13 +79,13 @@ SCREEN TIMESHEET-ENTRY FG=White BG=DarkGreen
         COLOR=CyanOnDarkGreen
     PROMPT "Week Ending :" ROW=12 COL=8
         COLOR=WhiteOnDarkGreen
-    FIELD ROW=12 COL=22 LEN=10 INTO TIMESHEET.WEEKEND
+    FIELD ROW=12 COL=22 LEN=10 INTO TIMESHEET.WEEKEND VALIDATE WITH CHECKWEEKEND
         NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
     PROMPT "(MM/DD/YYYY)" ROW=12 COL=32
         COLOR=DarkGrayOnDarkGreen
     PROMPT "Job Code    :" ROW=13 COL=8
         COLOR=WhiteOnDarkGreen
-    FIELD ROW=13 COL=22 LEN=5 INTO TIMESHEET.JOBCODE
+    FIELD ROW=13 COL=22 LEN=5 INTO TIMESHEET.JOBCODE VALIDATE WITH CHECKJOBCODE
         NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
     PROMPT "└───────────────────────────────────────────────────────────────────┘" ROW=14 COL=6
         COLOR=CyanOnDarkGreen
@@ -111,31 +115,31 @@ SCREEN HOURS-ENTRY FG=White BG=DarkGreen
         COLOR=CyanOnDarkGreen
     PROMPT "Monday    :" ROW=8  COL=8
         COLOR=WhiteOnDarkGreen
-    FIELD ROW=8 COL=20 LEN=5 INTO TIMESHEET.MON
+    FIELD ROW=8 COL=20 LEN=5 INTO TIMESHEET.MON VALIDATE WITH CHECKHOURS
         NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
     PROMPT "Tuesday   :" ROW=9  COL=8
         COLOR=WhiteOnDarkGreen
-    FIELD ROW=9 COL=20 LEN=5 INTO TIMESHEET.TUE
+    FIELD ROW=9 COL=20 LEN=5 INTO TIMESHEET.TUE VALIDATE WITH CHECKHOURS
         NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
     PROMPT "Wednesday :" ROW=10 COL=8
         COLOR=WhiteOnDarkGreen
-    FIELD ROW=10 COL=20 LEN=5 INTO TIMESHEET.WED
+    FIELD ROW=10 COL=20 LEN=5 INTO TIMESHEET.WED VALIDATE WITH CHECKHOURS
         NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
     PROMPT "Thursday  :" ROW=11 COL=8
         COLOR=WhiteOnDarkGreen
-    FIELD ROW=11 COL=20 LEN=5 INTO TIMESHEET.THU
+    FIELD ROW=11 COL=20 LEN=5 INTO TIMESHEET.THU VALIDATE WITH CHECKHOURS
         NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
     PROMPT "Friday    :" ROW=12 COL=8
         COLOR=WhiteOnDarkGreen
-    FIELD ROW=12 COL=20 LEN=5 INTO TIMESHEET.FRI
+    FIELD ROW=12 COL=20 LEN=5 INTO TIMESHEET.FRI VALIDATE WITH CHECKHOURS
         NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
     PROMPT "Saturday  :" ROW=13 COL=8
         COLOR=WhiteOnDarkGreen
-    FIELD ROW=13 COL=20 LEN=5 INTO TIMESHEET.SAT
+    FIELD ROW=13 COL=20 LEN=5 INTO TIMESHEET.SAT VALIDATE WITH CHECKHOURS
         NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
     PROMPT "Sunday    :" ROW=14 COL=8
         COLOR=WhiteOnDarkGreen
-    FIELD ROW=14 COL=20 LEN=5 INTO TIMESHEET.SUN
+    FIELD ROW=14 COL=20 LEN=5 INTO TIMESHEET.SUN VALIDATE WITH CHECKHOURS
         NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
     PROMPT "└───────────────────────────────────────────────────────────────────┘" ROW=15 COL=6
         COLOR=CyanOnDarkGreen
@@ -145,7 +149,7 @@ SCREEN HOURS-ENTRY FG=White BG=DarkGreen
         COLOR=CyanOnDarkGreen
     PROMPT "Total Hours :" ROW=18 COL=8
         COLOR=WhiteOnDarkGreen
-    FIELD ROW=18 COL=22 LEN=6 INTO TIMESHEET.TOTALS
+    FIELD ROW=18 COL=22 LEN=6 INTO TIMESHEET.TOTALS VALIDATE WITH CALCTOTALS
         NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
     PROMPT "Approved    :" ROW=18 COL=31
         COLOR=WhiteOnDarkGreen
@@ -159,3 +163,28 @@ SCREEN HOURS-ENTRY FG=White BG=DarkGreen
         NORMAL=WhiteOnDarkGreen FOCUS=BlackOnCyan ERROR=WhiteOnRed
     PROMPT "└───────────────────────────────────────────────────────────────────┘" ROW=20 COL=6
         COLOR=CyanOnDarkGreen
+
+VALIDATE-SECTION
+
+* Employee ID is required.
+VALIDATE CHECKEMPID
+    NOT EMPTY MESSAGE "Employee ID is required."
+
+* Week-ending date is required.
+VALIDATE CHECKWEEKEND
+    NOT EMPTY MESSAGE "Week ending date is required (MM/DD/YYYY)."
+
+* Job code is required.
+VALIDATE CHECKJOBCODE
+    NOT EMPTY MESSAGE "Job code is required."
+
+* Each day's hours must be between 0 and 24.
+* An empty entry (no hours worked) is allowed — the field defaults to 0.
+VALIDATE CHECKHOURS
+    VALUE IS BETWEEN 0 AND 24 MESSAGE "Hours must be between 0 and 24."
+
+* Auto-calculate total hours as the sum of all seven daily fields.
+* The ASSIGN rule fires when the user tabs out of the TOTALS field;
+* the returned string replaces the field value automatically.
+VALIDATE CALCTOTALS
+    TOTALS IS MON + TUE + WED + THU + FRI + SAT + SUN

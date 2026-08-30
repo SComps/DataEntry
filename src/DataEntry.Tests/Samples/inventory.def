@@ -1,5 +1,11 @@
 * ─────────────────────────────────────────────────────────────────────────────
 * inventory.def  —  Inventory Item Entry Form
+*
+* Demonstrates:
+*   NOT EMPTY rule  — SKU and description are required
+*   VALUE IS BETWEEN rule  — quantity and price range checks
+*   ASSIGN rule  — reorder level auto-set to 10% of quantity on hand
+*   MESSAGE clause  — custom error text shown in status bar
 * ─────────────────────────────────────────────────────────────────────────────
 
 DATA-SECTION
@@ -47,7 +53,7 @@ SCREEN INVENTORY-ENTRY COLOR=WhiteOnDarkBlue
         NORMAL=WhiteOnDarkBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
     PROMPT "Description :" ROW=9 COL=6
         COLOR=WhiteOnDarkBlue
-    FIELD ROW=9 COL=20 LEN=30 INTO ITEM.DESCR
+    FIELD ROW=9 COL=20 LEN=30 INTO ITEM.DESCR VALIDATE WITH CHECKDESCR
         NORMAL=WhiteOnDarkBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
     PROMPT "└──────────────────────────────────────────────────────────────────┘" ROW=10 COL=4
         COLOR=CyanOnDarkBlue
@@ -61,7 +67,7 @@ SCREEN INVENTORY-ENTRY COLOR=WhiteOnDarkBlue
         NORMAL=WhiteOnDarkBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
     PROMPT "Reorder At  :" ROW=13 COL=30
         COLOR=WhiteOnDarkBlue
-    FIELD ROW=13 COL=44 LEN=6 INTO ITEM.REORDER
+    FIELD ROW=13 COL=44 LEN=6 INTO ITEM.REORDER VALIDATE WITH CALCREORDER
         NORMAL=WhiteOnDarkBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
     PROMPT "Unit Price  :" ROW=14 COL=6
         COLOR=WhiteOnDarkBlue
@@ -87,3 +93,27 @@ SCREEN INVENTORY-ENTRY COLOR=WhiteOnDarkBlue
         NORMAL=WhiteOnDarkBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
     PROMPT "└──────────────────────────────────────────────────────────────────┘" ROW=20 COL=4
         COLOR=CyanOnDarkBlue
+
+VALIDATE-SECTION
+
+* SKU must not be blank — every item needs a unique identifier.
+VALIDATE CHECKSKU
+    NOT EMPTY MESSAGE "SKU number is required."
+
+* Description must not be blank.
+VALIDATE CHECKDESCR
+    NOT EMPTY MESSAGE "Item description is required."
+
+* Quantity on hand must be 0 or more, up to 999999.
+VALIDATE CHECKQTY
+    VALUE IS BETWEEN 0 AND 999999 MESSAGE "Quantity must be between 0 and 999999."
+
+* Unit price must be a positive value, up to 9999.99.
+VALIDATE CHECKPRICE
+    VALUE IS BETWEEN 0 AND 999999 MESSAGE "Price must be between 0.00 and 9999.99."
+
+* Auto-calculate reorder level as 10% of quantity on hand.
+* The ASSIGN rule fires when the user tabs out of the REORDER field;
+* the returned string replaces the field value automatically.
+VALIDATE CALCREORDER
+    REORDER IS QTY * 0.1

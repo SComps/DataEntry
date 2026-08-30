@@ -1,5 +1,10 @@
 * ─────────────────────────────────────────────────────────────────────────────
 * sample.def  —  Simple Customer Entry Form
+*
+* Demonstrates:
+*   NOT EMPTY rule  — name and city are required
+*   VALUE IS BETWEEN rule  — zip must be a valid 5-digit range
+*   MESSAGE clause  — custom error text shown in status bar
 * ─────────────────────────────────────────────────────────────────────────────
 
 DATA-SECTION
@@ -40,7 +45,7 @@ SCREEN CUST-ENTRY COLOR=WhiteOnBlue
 
     * ── Fields ──────────────────────────────────────────────────────
     PROMPT "Name   :" ROW=7  COL=4
-    FIELD ROW=7 COL=14 LEN=30 INTO CUST.CNAME
+    FIELD ROW=7 COL=14 LEN=30 INTO CUST.CNAME VALIDATE WITH CHECKNAME
         NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
 
     PROMPT "Address:" ROW=9  COL=4
@@ -52,7 +57,7 @@ SCREEN CUST-ENTRY COLOR=WhiteOnBlue
         NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
 
     PROMPT "City   :" ROW=12 COL=4
-    FIELD ROW=12 COL=14 LEN=20 INTO CUST.CCITY
+    FIELD ROW=12 COL=14 LEN=20 INTO CUST.CCITY VALIDATE WITH CHECKCITY
         NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
 
     PROMPT "State  :" ROW=12 COL=37
@@ -60,7 +65,7 @@ SCREEN CUST-ENTRY COLOR=WhiteOnBlue
         NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
 
     PROMPT "Zip    :" ROW=12 COL=52
-    FIELD ROW=12 COL=62 LEN=5  INTO CUST.CZIP
+    FIELD ROW=12 COL=62 LEN=5  INTO CUST.CZIP VALIDATE WITH CHECKZIP
         NORMAL=WhiteOnBlue FOCUS=BlackOnCyan ERROR=WhiteOnRed
 
     PROMPT "Phone  :" ROW=14 COL=4
@@ -69,3 +74,18 @@ SCREEN CUST-ENTRY COLOR=WhiteOnBlue
 
     PROMPT "└─────────────────────────────────────────────────────────────────────────┘" ROW=16 COL=2
         COLOR=CyanOnBlue
+
+VALIDATE-SECTION
+
+* Name must not be left blank.
+VALIDATE CHECKNAME
+    NOT EMPTY MESSAGE "Name is required."
+
+* City must not be left blank.
+VALIDATE CHECKCITY
+    NOT EMPTY MESSAGE "City is required."
+
+* Zip must be a 5-digit US postal code (00001 – 99999).
+VALIDATE CHECKZIP
+    NOT EMPTY MESSAGE "Zip code is required."
+    VALUE IS BETWEEN 1 AND 99999 MESSAGE "Zip must be a number between 00001 and 99999."
